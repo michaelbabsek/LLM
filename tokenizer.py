@@ -4,16 +4,12 @@ from typing import List, Sequence, Union, Optional
 
 
 class Tokenizer:
-    # -------------------------------------------------------------
-    # Initialisierung
-    # -------------------------------------------------------------
     def __init__(self, pattern: Optional[str] = None, model: str = "cl100k_base"):
         base_enc = tiktoken.get_encoding(model)
 
         self.pat_str = pattern or base_enc._pat_str
         mergeable_ranks = base_enc._mergeable_ranks
 
-        # eigene / zusätzliche Special-Tokens
         extra_special_tokens = [
             "<|begin_of_text|>",     # BOS
             "<|end_of_text|>",       # EOS
@@ -37,7 +33,6 @@ class Tokenizer:
         self.bos_token = "<|begin_of_text|>"
         self.eos_token = "<|end_of_text|>"
 
-        # eigenes Encoding (nur im RAM – keine Datei nötig)
         self._enc = tiktoken.Encoding(
             name=f"{model}_custom",
             pat_str=self.pat_str,
@@ -45,13 +40,9 @@ class Tokenizer:
             special_tokens=self.special_tokens,
         )
 
-    # -------------------------------------------------------------
-    # Hilfsmethoden
-    # -------------------------------------------------------------
     def __len__(self) -> int:
         return self._enc.n_vocab
 
-    # Haupt-Encoder ------------------------------------------------
     def encode(
         self,
         text: str,
@@ -63,13 +54,6 @@ class Tokenizer:
         return_torch: bool = False,
         device: Optional[torch.device] = None,
     ) -> Union[List[int], torch.Tensor]:
-        """
-        text                – Eingabe­string
-        add_bos / add_eos   – BOS/EOS automatisch anfügen?
-        pad_to              – gewünschte Sequenz­länge; kürzen oder rechts mit PAD auffüllen
-        return_torch        – Liste (False) oder Tensor (True) zurückgeben
-        device              – Ziel­gerät bei Tensor-Rückgabe
-        """
 
         tokens: List[int] = []
 
@@ -81,7 +65,6 @@ class Tokenizer:
         if add_eos:
             tokens.append(self.special_tokens[self.eos_token])
 
-        # padding / truncation ------------------------------------
         if pad_to is not None:
             if len(tokens) > pad_to:
                 tokens = tokens[:pad_to]          # hart abschneiden
@@ -93,7 +76,6 @@ class Tokenizer:
 
         return tokens
 
-    # Decoder -----------------------------------------------------
     def decode(
         self,
         tokens: Sequence[int],
@@ -101,10 +83,6 @@ class Tokenizer:
         skip_special: bool = False,
         skip_pad: bool = True,
     ) -> str:
-        """
-        skip_special – entferne alle (nicht-PAD) Special-Tokens vor dem Dekodieren
-        skip_pad     – entferne PAD-Tokens
-        """
         if skip_special or skip_pad:
             filtered: List[int] = []
             for t in tokens:

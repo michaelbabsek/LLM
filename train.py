@@ -121,7 +121,5 @@ def train(num_epochs: int, lr: float):
             if idx % 100 == 0:
                 torch.save(model.state_dict(), f"model.pt")
 
-        print(f"→ Epoch {epoch + 1} abgeschlossen, avg loss = {avg_loss:.4f}")
-
 if __name__ == "__main__":
     train(num_epochs=1, lr=3e-4)
