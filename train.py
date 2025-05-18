@@ -11,6 +11,22 @@ from model import Transformer, ModelArgs
 from tokenizer import Tokenizer
 from wiki_dataset import WikiDataset
 
+#model args
+n_dim: int = 768
+n_blocks: int = 4
+n_heads: int = 4
+max_seq_len: int = 1024
+
+# training
+n_epochs = 5
+batch_size: int = 4
+max_lr = 6e-4
+min_lr = 1e-6
+warmup_steps_percentage = 0.1
+
+#generation
+max_token_len = 50
+
 
 def get_device():
     if torch.cuda.is_available():
@@ -24,18 +40,18 @@ device = get_device()
 
 tokenizer = Tokenizer()
 
-args = ModelArgs(n_dim=768, n_blocks=4, n_heads=4, max_seq_len=1024, vocab_size=len(tokenizer))
+args = ModelArgs(n_dim=n_dim, n_blocks=n_blocks, n_heads=n_heads, max_seq_len=max_seq_len, vocab_size=len(tokenizer))
 
 wiki_dataset = WikiDataset(tokenizer=tokenizer, max_seq_len=args.max_seq_len)
 
 data_loader = DataLoader(
     wiki_dataset,
-    batch_size=1,
+    batch_size=batch_size,
     shuffle=True,
     drop_last=True,
     pin_memory=(device.startswith("cuda")))
 
-def train(num_epochs: int, lr: float):
+def train():
     torch.set_float32_matmul_precision('high')
 
     model = Transformer(args=args).to(device)
@@ -46,24 +62,24 @@ def train(num_epochs: int, lr: float):
     if device != 'mps':
         model.compile()
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr)
 
-    total_steps = num_epochs * len(data_loader)
-    warmup_steps = int(total_steps * 0.1)
+    total_steps = n_epochs * len(data_loader)
+    warmup_steps = int(total_steps * warmup_steps_percentage)
 
     scheduler = CosineAnnealingLR(
         optimizer,
         T_max=total_steps - warmup_steps,
-        eta_min=1e-6,
+        eta_min=min_lr,
     )
 
     use_amp = device == "cuda"
     scaler = torch.cuda.amp.GradScaler() if use_amp else None
 
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
         model.train()
         epoch_loss = 0.0
-        pbar = tqdm(data_loader, desc=f"Epoch {epoch + 1}/{num_epochs}")
+        pbar = tqdm(data_loader, desc=f"Epoch {epoch + 1}/{n_epochs}")
         for idx, batch in enumerate(pbar):
             batch = batch.to(device)
             input_ids  = batch[:, :-1]
@@ -104,9 +120,8 @@ def train(num_epochs: int, lr: float):
         # generate sample
         model.eval()
         input = tokenizer.encode("Hallo", add_bos=True)
-        output = model.generate(input, device=device, max_token_length=100)
+        output = model.generate(input, device=device, max_token_length=max_token_len)
         print({f"Epoch {epoch+1}": tokenizer.decode(output)})
 
 if __name__ == "__main__":
-    steps_per_epoch = len(data_loader)
-    train(num_epochs=1, lr=6e-4)
+    train()
