@@ -1,4 +1,5 @@
 import math
+from typing import List
 
 import torch
 from torch import nn
@@ -11,7 +12,7 @@ class ModelArgs:
     n_dim: int = 768
     n_blocks: int = 4
     n_heads: int = 4
-    max_seq_len: int = 256
+    max_seq_len: int = 1024
     vocab_size: int = -1 # later defined by tokenizer
 
 class MultiheadAttention(nn.Module):
@@ -102,5 +103,22 @@ class Transformer(nn.Module):
 
         x = self.fc(x)
         return x
+
+    def generate(self, input: List[int], max_token_length: int, device):
+        self.eval()
+        input_tensor = torch.tensor([input], device=device)
+        output = input.copy()
+
+        for _ in range(max_token_length - len(input)):
+            logits = self.forward(input_tensor)
+            probs = F.softmax(logits[:, -1, :], dim=-1)
+            next_token = torch.argmax(probs, dim=-1).item()
+            output.append(next_token)
+
+            input_tensor = torch.cat([input_tensor, torch.tensor([[next_token]], device=device)], dim=1)
+
+        return output
+
+
 
 
