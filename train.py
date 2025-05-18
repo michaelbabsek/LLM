@@ -92,6 +92,11 @@ def train(num_epochs: int, lr: float):
 
         torch.save(model.state_dict(), f"model.pt") # saving the model after each epoch
 
+        # generate sample
+        input = tokenizer.encode("Hallo", add_bos=True)
+        output = model.generate(input, device=device, max_token_length=100)
+        print({f"Epoch {epoch+1}": tokenizer.decode(output)})
+
 if __name__ == "__main__":
     steps_per_epoch = len(data_loader)
     train(num_epochs=1, lr=6e-4)
