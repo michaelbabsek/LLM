@@ -105,7 +105,6 @@ class Transformer(nn.Module):
         return x
 
     def generate(self, input: List[int], max_token_length: int, device):
-        self.eval()
         input_tensor = torch.tensor([input], device=device)
         output = input.copy()
 

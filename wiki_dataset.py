@@ -32,7 +32,7 @@ class WikiDataset(Dataset):
             raw_dataset = load_dataset(
                 path="wikipedia",
                 name="20220301.de",
-                split="train[:10%]" #loading 10% of the dataset
+                split="train[:1%]" #loading 10% of the dataset
             ).remove_columns(["id", "url", "title"]) # only use contents
 
             text_encoded = raw_dataset.map(self._encode_text)

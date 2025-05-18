@@ -1,3 +1,4 @@
+import contextlib
 import os
 
 import torch
@@ -29,10 +30,9 @@ wiki_dataset = WikiDataset(tokenizer=tokenizer, max_seq_len=args.max_seq_len)
 
 data_loader = DataLoader(
     wiki_dataset,
-    batch_size=32,
+    batch_size=1,
     shuffle=True,
     drop_last=True,
-    num_workers=4,
     pin_memory=(device.startswith("cuda")))
 
 def train(num_epochs: int, lr: float):
@@ -43,9 +43,9 @@ def train(num_epochs: int, lr: float):
     if os.path.exists('./model.pt'):
         model.load_state_dict(torch.load("model.pt", map_location=device))
 
+    if device != 'mps':
+        model.compile()
 
-    model.compile()
-    model.train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     total_steps = num_epochs * len(data_loader)
@@ -57,9 +57,11 @@ def train(num_epochs: int, lr: float):
         eta_min=1e-6,
     )
 
-    scaler = torch.amp.GradScaler(device)
+    use_amp = device == "cuda"
+    scaler = torch.cuda.amp.GradScaler() if use_amp else None
 
     for epoch in range(num_epochs):
+        model.train()
         epoch_loss = 0.0
         pbar = tqdm(data_loader, desc=f"Epoch {epoch + 1}/{num_epochs}")
         for idx, batch in enumerate(pbar):
@@ -67,14 +69,24 @@ def train(num_epochs: int, lr: float):
             input_ids  = batch[:, :-1]
             target_ids = batch[:, 1:]
 
-            with torch.amp.autocast('cuda'):
+            if use_amp:
+                with torch.cuda.amp.autocast():
+                    logits = model(input_ids)
+                    loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target_ids.reshape(-1))
+            else:
                 logits = model(input_ids)
                 loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target_ids.reshape(-1))
 
             optimizer.zero_grad()
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+
+            if use_amp:
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
+
             scheduler.step()
 
             step_loss = loss.item()
@@ -90,6 +102,7 @@ def train(num_epochs: int, lr: float):
         torch.save(model.state_dict(), f"model.pt") # saving the model after each epoch
 
         # generate sample
+        model.eval()
         input = tokenizer.encode("Hallo", add_bos=True)
         output = model.generate(input, device=device, max_token_length=100)
         print({f"Epoch {epoch+1}": tokenizer.decode(output)})
