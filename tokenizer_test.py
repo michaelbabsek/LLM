@@ -1,4 +1,3 @@
-from distutils.core import setup_keywords
 from unittest import TestCase
 
 from tokenizer import Tokenizer
