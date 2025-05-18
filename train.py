@@ -1,32 +1,15 @@
-from datasets import load_dataset
-from torch.utils.data import Dataset, DataLoader
-from model import Transformer, ModelArgs
-from tokenizer import Tokenizer
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import os
+
 import torch
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from model import Transformer, ModelArgs
+from tokenizer import Tokenizer
 from wiki_dataset import WikiDataset
-
-tokenizer = Tokenizer()
-
-args = ModelArgs(
-    n_dim=768,
-    n_blocks=4,
-    n_heads=4,
-    max_seq_len=1024,
-    vocab_size=len(tokenizer),
-)
-
-wiki_dataset = WikiDataset(tokenizer=tokenizer, max_seq_len=args.max_seq_len)
-
-data_loader = DataLoader(
-    wiki_dataset,
-    batch_size=1,
-    shuffle=True,
-    drop_last=True
-)
 
 
 def get_device():
@@ -37,16 +20,43 @@ def get_device():
     else:
         return "cpu"
 
+device = get_device()
+
+tokenizer = Tokenizer()
+
+args = ModelArgs(n_dim=768, n_blocks=4, n_heads=4, max_seq_len=1024, vocab_size=len(tokenizer))
+
+wiki_dataset = WikiDataset(tokenizer=tokenizer, max_seq_len=args.max_seq_len)
+
+data_loader = DataLoader(
+    wiki_dataset,
+    batch_size=1,
+    shuffle=True,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=(device.startswith("cuda")))
 
 def train(num_epochs: int, lr: float):
     torch.set_float32_matmul_precision('high')
-    device = get_device()
+
     model = Transformer(args=args).to(device)
+
     if os.path.exists('./model.pt'):
         model.load_state_dict(torch.load("model.pt", map_location=device))
-    model.train()
 
+
+    model.compile()
+    model.train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+
+    total_steps = num_epochs * len(data_loader)
+    warmup_steps = int(total_steps * 0.1)
+
+    scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=total_steps - warmup_steps,
+        eta_min=1e-6,
+    )
 
     for epoch in range(num_epochs):
         epoch_loss = 0.0
@@ -56,13 +66,20 @@ def train(num_epochs: int, lr: float):
             input_ids  = batch[:, :-1]
             target_ids = batch[:, 1:]
 
-            with torch.autocast(device_type=device, dtype=torch.bfloat16):
+            scaler = torch.cuda.amp.GradScaler()
+            with torch.cuda.amp.autocast():
                 logits = model(input_ids)
                 loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)),  target_ids.reshape(-1),)
 
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
             optimizer.zero_grad()
             loss.backward()
+
             optimizer.step()
+            scheduler.step()
 
             step_loss = loss.item()
             epoch_loss += step_loss
@@ -77,4 +94,4 @@ def train(num_epochs: int, lr: float):
 
 if __name__ == "__main__":
     steps_per_epoch = len(data_loader)
-    train(num_epochs=1, lr=3e-4)
+    train(num_epochs=1, lr=6e-4)
