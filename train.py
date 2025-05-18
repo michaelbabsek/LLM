@@ -1,4 +1,3 @@
-from torch.optim.lr_scheduler import CosineAnnealingLR
 import os
 
 import torch
@@ -30,7 +29,7 @@ wiki_dataset = WikiDataset(tokenizer=tokenizer, max_seq_len=args.max_seq_len)
 
 data_loader = DataLoader(
     wiki_dataset,
-    batch_size=1,
+    batch_size=32,
     shuffle=True,
     drop_last=True,
     num_workers=4,
@@ -58,6 +57,8 @@ def train(num_epochs: int, lr: float):
         eta_min=1e-6,
     )
 
+    scaler = torch.amp.GradScaler(device)
+
     for epoch in range(num_epochs):
         epoch_loss = 0.0
         pbar = tqdm(data_loader, desc=f"Epoch {epoch + 1}/{num_epochs}")
@@ -66,22 +67,18 @@ def train(num_epochs: int, lr: float):
             input_ids  = batch[:, :-1]
             target_ids = batch[:, 1:]
 
-            scaler = torch.cuda.amp.GradScaler()
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 logits = model(input_ids)
-                loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)),  target_ids.reshape(-1),)
+                loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target_ids.reshape(-1))
 
+            optimizer.zero_grad()
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-
-            optimizer.zero_grad()
-            loss.backward()
-
-            optimizer.step()
             scheduler.step()
 
             step_loss = loss.item()
+
             epoch_loss += step_loss
             avg_loss = epoch_loss / (idx + 1)
 
