@@ -25,7 +25,7 @@ min_lr = 1e-6
 warmup_steps_percentage = 0.1
 
 #generation
-max_token_len = 50
+max_token_len = max_seq_len
 
 
 def get_device():

@@ -13,3 +13,14 @@ class TokenizerTests(TestCase):
         encoded = self.tokenizer.encode(s)
         self.assertEqual(s, self.tokenizer.decode(encoded))
 
+    def test_bos_token(self):
+        self.assertEqual(
+            self.tokenizer.special_tokens["<|begin_of_text|>"],
+            self.tokenizer.bos_token_id
+        )
+
+    def test_special_tokens(self):
+        self.assertTrue(
+            self.tokenizer.bos_token_id in self.tokenizer.special_tokens.values()
+        )
+
