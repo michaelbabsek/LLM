@@ -1,5 +1,5 @@
 import math
-from typing import List
+from typing import List, Optional
 
 import torch
 from torch import nn
@@ -16,14 +16,13 @@ class ModelArgs:
     vocab_size: int = -1 # later defined by tokenizer
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, args: ModelArgs, use_mask: bool = True):
+    def __init__(self, args: ModelArgs):
         super().__init__()
         self.args = args
-        self.use_mask = use_mask
         self.qkv = nn.Linear(args.n_dim, args.n_dim * 3)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x):
+    def forward(self, x, mask: Optional[torch.Tensor] = None):
         B, S, _ = x.shape  # Batch, Sequence
         H = self.args.n_heads # number of heads
         D = self.args.n_dim  # model dim
@@ -38,9 +37,8 @@ class MultiheadAttention(nn.Module):
         scores = (q @ k.transpose(-2, -1)) / math.sqrt(D_h)  # (B, H, S, S)
 
         # mask
-        if self.use_mask:
-            causal = torch.triu(torch.ones(S, S, device=x.device, dtype=torch.bool), diagonal=1)
-            scores = scores.masked_fill(causal, float('-inf'))
+        if mask is not None:
+            scores = scores + mask
 
         weights = F.softmax(scores, dim=-1)
         weights = self.dropout(weights)
@@ -76,8 +74,8 @@ class Block(nn.Module):
         self.norm1 = nn.LayerNorm(args.n_dim)
         self.norm2 = nn.LayerNorm(args.n_dim)
 
-    def forward(self, x):
-        x = x + self.attn(self.norm1(x))
+    def forward(self, x, mask: Optional[torch.Tensor] = None):
+        x = x + self.attn(self.norm1(x), mask=mask)
         x = x + self.mlp(self.norm2(x))
         return x
 
@@ -98,8 +96,13 @@ class Transformer(nn.Module):
         x = x + self.pos(torch.arange(S, device=x.device))
         x = self.norm(x)
 
+        mask = None
+        if S > 1:
+            mask = torch.full((S, S), float("-inf"), device=x.device)
+            mask = torch.triu(mask, diagonal=1)
+
         for block in self.blocks:
-            x = block(x)
+            x = block(x, mask=mask)
 
         x = self.fc(x)
         return x

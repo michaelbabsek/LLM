@@ -1,6 +1,6 @@
+from typing import List, Sequence
+
 import tiktoken
-import torch
-from typing import List, Sequence, Union, Optional
 
 
 class Tokenizer:
