@@ -107,11 +107,11 @@ class Transformer(nn.Module):
         x = self.fc(x)
         return x
 
-    def generate(self, input: List[int], max_token_length: int, device):
-        input_tensor = torch.tensor([input], device=device)
-        output = input.copy()
+    def generate(self, tokens: List[int], max_token_length: int, device):
+        input_tensor = torch.tensor(tokens, device=device).unsqueeze(0)
+        output = tokens.copy()
 
-        for _ in range(max_token_length - len(input)):
+        for _ in range(max_token_length - len(tokens)):
             logits = self.forward(input_tensor)
             probs = F.softmax(logits[:, -1, :], dim=-1)
             next_token = torch.argmax(probs, dim=-1).item()

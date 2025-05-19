@@ -4,7 +4,7 @@ import tiktoken
 
 
 class Tokenizer:
-    def __init__(self, model: str = "cl100k_base"):
+    def __init__(self, model: str = "cl100k_base"): # use gpt-4 base model
         basemodel = tiktoken.get_encoding(model)
 
         # llama3 pat_str
@@ -33,7 +33,7 @@ class Tokenizer:
         self.model = tiktoken.Encoding(
             name=f"{model}_custom",
             pat_str=self.pat_str,
-            mergeable_ranks=basemodel._mergeable_ranks,
+            mergeable_ranks=basemodel._mergeable_ranks, # calling private attribute, probably not optimal
             special_tokens=self.special_tokens,
         )
 
@@ -41,20 +41,15 @@ class Tokenizer:
         return self.model.n_vocab
 
     def encode(self, s: str, add_bos: bool = False,add_eos: bool = False,) -> List[int]:
-
         tokens: List[int] = []
-
         if add_bos:
             tokens.append(self.bos_token_id)
-
         tokens.extend(self.model.encode(s))
-
         if add_eos:
             tokens.append(self.eos_token_id)
-
         return tokens
 
     def decode(self, tokens: Sequence[int], skip_special: bool = False) -> str:
         if skip_special:
-            tokens = [tok for tok in tokens if tok not in self.special_tokens]
+            tokens = [tok for tok in tokens if tok not in self.special_tokens.values()]
         return self.model.decode(tokens)
