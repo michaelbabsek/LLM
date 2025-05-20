@@ -33,6 +33,9 @@ class MultiheadAttention(nn.Module):
 
         q, k, v = qkv.unbind(dim=2)
 
+        '''
+        original code:
+        
         # Scaled-Dot-Product Attention
         scores = (q @ k.transpose(-2, -1)) / math.sqrt(D_h)  # (B, H, S, S)
 
@@ -42,8 +45,10 @@ class MultiheadAttention(nn.Module):
 
         weights = F.softmax(scores, dim=-1)
         weights = self.dropout(weights)
-
         context = weights @ v  # (B, H, S, D_h)
+        '''
+
+        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=mask, dropout_p=0.1) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
 
         return context
