@@ -12,14 +12,14 @@ from tokenizer import Tokenizer
 from wiki_dataset import WikiDataset
 
 #model args
-n_dim: int = 768
+n_dim: int = 368
 n_blocks: int = 4
 n_heads: int = 4
 max_seq_len: int = 1024
 
 # training
 n_epochs = 5
-batch_size: int = 4
+batch_size: int = 1
 max_lr = 6e-4
 min_lr = 1e-6
 warmup_steps_percentage = 0.1

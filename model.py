@@ -10,8 +10,8 @@ import torch.nn.functional as F
 @dataclass
 class ModelArgs:
     n_dim: int = 768
-    n_blocks: int = 4
-    n_heads: int = 4
+    n_blocks: int = 16
+    n_heads: int = 8
     max_seq_len: int = 1024
     vocab_size: int = -1 # later defined by tokenizer
 
@@ -89,6 +89,8 @@ class Transformer(nn.Module):
         self.norm = nn.LayerNorm(args.n_dim)
         self.blocks = nn.ModuleList([Block(args) for _ in range(args.n_blocks)])
         self.fc = nn.Linear(args.n_dim, args.vocab_size)
+
+        self.fc.weight = self.tok.weight # weight tying significantly reduces number of parameters and improves performance
 
     def forward(self, x):
         B, S = x.shape
