@@ -20,7 +20,7 @@ class MultiheadAttention(nn.Module):
         super().__init__()
         self.args = args
         self.qkv = nn.Linear(args.n_dim, args.n_dim * 3)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = 0.1
 
     def forward(self, x, mask: Optional[torch.Tensor] = None):
         B, S, _ = x.shape  # Batch, Sequence
@@ -34,7 +34,7 @@ class MultiheadAttention(nn.Module):
         q, k, v = qkv.unbind(dim=2)
 
         '''
-        original code:
+        original code before using flash attention:
         
         # Scaled-Dot-Product Attention
         scores = (q @ k.transpose(-2, -1)) / math.sqrt(D_h)  # (B, H, S, S)
@@ -48,7 +48,7 @@ class MultiheadAttention(nn.Module):
         context = weights @ v  # (B, H, S, D_h)
         '''
 
-        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=mask, dropout_p=0.1) # using flash attention
+        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=mask, dropout_p=self.dropout) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
 
         return context
