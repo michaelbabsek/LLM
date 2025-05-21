@@ -1,11 +1,9 @@
-import contextlib
 import os
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from model import Transformer, ModelArgs
@@ -19,14 +17,14 @@ max_seq_len: int = 1024
 
 # training
 total_iters = 60_000
-saving_interval = 1_000
+saving_interval = 100
 batch_size: int = 1
 max_lr = 6e-4
 min_lr = 1e-6
 warmup_steps_percentage = 0.1
 
 #generation
-max_token_len = max_seq_len
+max_token_len = 100
 
 def get_device():
     if torch.cuda.is_available():
@@ -89,8 +87,8 @@ def train():
 
     pbar = tqdm(total=total_iters, desc=f"Training Step")
 
+    loss_sum = 0.0
     for step_idx in range(1, total_iters):
-        loss_sum = 0.0
         input_ids, target_ids = get_batch('train')
 
         if use_amp:
@@ -126,7 +124,7 @@ def train():
 
         if step_idx % saving_interval == 0:
             model.eval()
-            input = tokenizer.encode("Hallo", add_bos=True)
+            input = tokenizer.encode("What is a cat?", add_bos=True)
             output = model.generate(input, device=device, max_token_length=max_token_len)
             print(tokenizer.decode(output))
             model.train()
