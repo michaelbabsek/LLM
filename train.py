@@ -1,3 +1,4 @@
+import contextlib
 import os
 
 import numpy as np
@@ -36,6 +37,10 @@ def get_device():
 
 device = get_device()
 
+use_amp = device == "cuda"
+ctx = torch.cuda.amp.autocast() if use_amp else contextlib.nullcontext()
+scaler = torch.cuda.amp.GradScaler() if use_amp else None
+
 tokenizer = Tokenizer()
 
 args = ModelArgs(n_dim=n_dim, n_blocks=n_blocks, n_heads=n_heads, max_seq_len=max_seq_len, vocab_size=len(tokenizer))
@@ -73,29 +78,16 @@ def train():
     optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr)
 
     warmup_steps = int(total_iters * warmup_steps_percentage)
-
-    scheduler = CosineAnnealingLR(
-        optimizer,
-        T_max=total_iters - warmup_steps,
-        eta_min=min_lr,
-    )
-
-    use_amp = device == "cuda"
-    scaler = torch.cuda.amp.GradScaler() if use_amp else None
+    scheduler = CosineAnnealingLR(optimizer,T_max=total_iters - warmup_steps,eta_min=min_lr)
 
     model.train()
 
     pbar = tqdm(total=total_iters, desc=f"Training Step")
-
     loss_sum = 0.0
     for step_idx in range(1, total_iters):
         input_ids, target_ids = get_batch('train')
 
-        if use_amp:
-            with torch.cuda.amp.autocast():
-                logits = model(input_ids)
-                loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target_ids.reshape(-1))
-        else:
+        with ctx:
             logits = model(input_ids)
             loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target_ids.reshape(-1))
 
