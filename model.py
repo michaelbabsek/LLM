@@ -97,22 +97,31 @@ class Transformer(nn.Module):
 
         self.fc.weight = self.tok.weight # weight tying significantly reduces number of parameters and improves performance
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor, y: Optional[torch.Tensor] = None):
         B, S = x.shape
-        x = self.tok(x)  # (B, S, n_dim)
-        x = x + self.pos(torch.arange(S, device=x.device))
-        x = self.norm(x)
+
+        h = self.tok(x)  # (B, S, D)
+        h = h + self.pos(torch.arange(S, device=x.device))
+        h = self.norm(h)
 
         mask = None
         if S > 1:
             mask = torch.full((S, S), float("-inf"), device=x.device)
-            mask = torch.triu(mask, diagonal=1)
+            mask = torch.triu(mask, diagonal=1)  # upper-triangular
 
         for block in self.blocks:
-            x = block(x, mask=mask)
+            h = block(h, mask=mask)
 
-        x = self.fc(x)
-        return x
+        logits = self.fc(h)  # (B, S, V)
+
+        if y is not None:
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                y.view(-1)
+            )
+            return loss, logits
+
+        return logits
 
     def generate(self, tokens: List[int], max_token_length: int, device):
         input_tensor = torch.tensor(tokens, device=device).unsqueeze(0)
