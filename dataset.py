@@ -1,7 +1,9 @@
 import os
 
 import numpy as np
+import torch
 from datasets import load_dataset
+from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from tokenizer import Tokenizer
@@ -45,6 +47,20 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
             idx += len(arr_shard)
         arr.flush()
 
+class BinDataset(Dataset):
+    def __init__(self, chunk_size: int, split: str):
+        super().__init__()
+        self.data = np.memmap(filename=f"{split}.bin", dtype=np.uint32, mode="r")
+        self.chunk_size = chunk_size
+
+    def __len__(self):
+        return len(self.data) - self.chunk_size
+
+    def __getitem__(self, idx):
+        x =  torch.from_numpy(self.data[idx:idx + self.chunk_size].astype(np.int64))
+        y = torch.from_numpy(self.data[idx+1:idx + self.chunk_size+1].astype(np.int64))
+
+        return x, y
 
 if __name__ == "__main__":
     _prepare()
