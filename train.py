@@ -1,5 +1,6 @@
 import contextlib
 import os
+import time
 
 import numpy as np
 import torch
@@ -82,8 +83,9 @@ def train():
     pbar = tqdm(total=train_iters, desc="Training step")
     loss_sum = 0.0
 
+    train_iter = iter(train_loader)
     for step_idx in range(train_iters):
-        x, y = next(iter(train_loader))
+        x, y = next(train_iter)
 
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
@@ -110,6 +112,8 @@ def train():
             pbar.update(1)
             pbar.set_postfix(step_loss=f"{step_loss:.4f}",
                              avg_loss=f"{avg_loss:.4f}")
+
     pbar.close()
+
 if __name__ == "__main__":
     train()
