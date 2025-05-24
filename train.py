@@ -58,7 +58,7 @@ model = Transformer(
 if torch.__version__ >= "2.0" and device == "cuda":
     model.compile()
 
-if os.path.exists('./model.pt'):
+if os.path.exists('./model.pt'): # load model if existing
     model.load_state_dict(torch.load("model.pt", map_location=device))
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr)
@@ -69,13 +69,11 @@ scheduler = get_cosine_schedule_with_warmup(
     num_training_steps=train_iters, num_cycles=0.5
 )
 
-train_data = BinDataset(chunk_size=max_seq_len, split="train")
-val_data = BinDataset(chunk_size=max_seq_len, split="val")
+train_data = BinDataset(chunk_size=max_seq_len, split="train", device=device)
+val_data = BinDataset(chunk_size=max_seq_len, split="val", device=device)
 
 train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=False, pin_memory=cuda) #shuffling would take ages
 val_loader = DataLoader(dataset=val_data, batch_size=batch_size, shuffle=False, pin_memory=cuda)
-
-splits = {'train': train_loader, 'val': val_loader}
 
 def train():
     torch.set_float32_matmul_precision('high')
@@ -86,9 +84,6 @@ def train():
     train_iter = iter(train_loader)
     for step_idx in range(train_iters):
         x, y = next(train_iter)
-
-        x = x.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
 
         with ctx:
             loss, _ = model(x, y)

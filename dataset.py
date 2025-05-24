@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import numpy as np
 import torch
@@ -48,10 +49,11 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
         arr.flush()
 
 class BinDataset(Dataset):
-    def __init__(self, chunk_size: int, split: str):
+    def __init__(self, chunk_size: int, split: str, device: Optional[torch.device] = "cpu"):
         super().__init__()
         self.data = np.memmap(filename=f"{split}.bin", dtype=np.uint32, mode="r")
         self.chunk_size = chunk_size
+        self.device = device
 
     def __len__(self):
         return len(self.data) - self.chunk_size
@@ -60,7 +62,7 @@ class BinDataset(Dataset):
         x =  torch.from_numpy(self.data[idx:idx + self.chunk_size].astype(np.int64))
         y = torch.from_numpy(self.data[idx+1:idx + self.chunk_size+1].astype(np.int64))
 
-        return x, y
+        return x.to(device=self.device, non_blocking=True), y.to(device=self.device, non_blocking=True)
 
 if __name__ == "__main__":
     _prepare()
