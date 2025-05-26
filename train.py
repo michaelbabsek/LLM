@@ -24,13 +24,12 @@ n_heads: int = 8
 max_seq_len: int = 1024
 
 # training
-train_iters = 60_000
-eval_iters = 10
-eval_interval = 100
-warmup_frac = 0.1
+train_iters: int = 60_000
+eval_iters: int = 10
+eval_interval: int = 100
+warmup_frac: float = 0.1
 batch_size: int = 1
-max_lr = 6e-4
-warmup_steps_percentage = 0.1
+max_lr: float = 6e-4
 
 wandb.login()
 
@@ -48,7 +47,7 @@ run = wandb.init(
         'warmup_frac': warmup_frac,
         'batch_size': batch_size,
         'max_lr': max_lr,
-        'warmup_steps_percentage': warmup_steps_percentage
+        'warmup_steps_percentage': warmup_frac
     }
 )
 
@@ -109,6 +108,10 @@ def estimate_loss():
     val_iter = iter(val_loader)
     for step_idx in range(eval_iters):
         x, y = next(val_iter)
+
+        x = x.to(device)
+        y = y.to(device)
+
         with ctx:
             loss, _ = model(x, y)
 
