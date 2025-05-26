@@ -5,6 +5,10 @@ import time
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch import nn
+
+import wandb
+from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_cosine_schedule_with_warmup
@@ -21,15 +25,32 @@ max_seq_len: int = 1024
 
 # training
 train_iters = 60_000
-eval_iters = 2
-eval_interval = 1000
+eval_iters = 10
+eval_interval = 100
 warmup_frac = 0.1
 batch_size: int = 1
 max_lr = 6e-4
 warmup_steps_percentage = 0.1
 
-#generation
-max_token_len = 100
+wandb.login()
+
+run = wandb.init(
+    project="LLM",
+    # Track hyperparameters and run metadata.
+    config={
+        'n_dim': n_dim,
+        'n_blocks': n_blocks,
+        'n_heads': n_heads,
+        'max_seq_len': max_seq_len,
+        'train_iters': train_iters,
+        'eval_iters': eval_iters,
+        'eval_interval': eval_interval,
+        'warmup_frac': warmup_frac,
+        'batch_size': batch_size,
+        'max_lr': max_lr,
+        'warmup_steps_percentage': warmup_steps_percentage
+    }
+)
 
 def get_device():
     if torch.cuda.is_available():
@@ -55,11 +76,15 @@ model = Transformer(
     max_seq_len=max_seq_len,
     vocab_size=len(tokenizer))).to(device)
 
+print(model.args.vocab_size)
+
 if torch.__version__ >= "2.0" and device == "cuda":
     model.compile()
 
 if os.path.exists('./model.pt'): # load model if existing
     model.load_state_dict(torch.load("model.pt", map_location=device))
+
+print(f"Model parameters: {(sum(param.numel() for param in model.parameters())):,}")
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr)
 
@@ -75,15 +100,38 @@ val_data = BinDataset(chunk_size=max_seq_len, split="val", device=device)
 train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=False, pin_memory=cuda) #shuffling would take ages
 val_loader = DataLoader(dataset=val_data, batch_size=batch_size, shuffle=False, pin_memory=cuda)
 
+
+@torch.no_grad()
+def estimate_loss():
+    model.eval()
+    pbar = tqdm(total=eval_iters, desc="Evaluating")
+    total_loss = 0.0
+    val_iter = iter(val_loader)
+    for step_idx in range(eval_iters):
+        x, y = next(val_iter)
+        with ctx:
+            loss, _ = model(x, y)
+
+        total_loss += loss.item()
+        pbar.update(1)
+
+    pbar.close()
+    model.train()
+    return total_loss / eval_iters # avg val loss
+
+
 def train():
     torch.set_float32_matmul_precision('high')
     model.train()
-    pbar = tqdm(total=train_iters, desc="Training step")
-    loss_sum = 0.0
+    pbar = tqdm(total=train_iters, desc="Training")
+    total_loss = 0.0
 
     train_iter = iter(train_loader)
     for step_idx in range(train_iters):
         x, y = next(train_iter)
+
+        x = x.to(device)
+        y = y.to(device)
 
         with ctx:
             loss, _ = model(x, y)
@@ -92,23 +140,36 @@ def train():
 
             if cuda:
                 scaler.scale(loss).backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                norm = clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                norm = clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
-            scheduler.step()
+        scheduler.step()
 
-            step_loss = loss.item()
-            loss_sum += step_loss
-            avg_loss = loss_sum / (step_idx + 1)
+        step_loss = loss.item()
+        total_loss += step_loss
+        avg_loss = total_loss / (step_idx + 1)
 
-            pbar.update(1)
-            pbar.set_postfix(step_loss=f"{step_loss:.4f}",
-                             avg_loss=f"{avg_loss:.4f}")
+        pbar.update(1)
+        pbar.set_postfix(step_loss=f"{step_loss:.4f}", avg_loss=f"{avg_loss:.4f}")
+
+        wandb.log({
+            "train/loss": step_loss,
+            "train/learning_rate": scheduler.get_last_lr(),
+            "train/norm": norm
+        })
+
+        if (step_idx + 1) % eval_interval == 0:
+            val_loss = estimate_loss()
+            val_perplexity = torch.exp(torch.tensor(val_loss)).item()
+            wandb.log({
+                "val/loss": val_loss,
+                "val/perplexity": val_perplexity
+            })
 
     pbar.close()
 

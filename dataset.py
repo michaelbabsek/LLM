@@ -49,7 +49,7 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
         arr.flush()
 
 class BinDataset(Dataset):
-    def __init__(self, chunk_size: int, split: str, device: Optional[torch.device] = "cpu"):
+    def __init__(self, chunk_size: int, split: str, device = "cpu"):
         super().__init__()
         self.data = np.memmap(filename=f"{split}.bin", dtype=np.uint32, mode="r")
         self.chunk_size = chunk_size
@@ -59,10 +59,9 @@ class BinDataset(Dataset):
         return len(self.data) - self.chunk_size
 
     def __getitem__(self, idx):
-        x =  torch.from_numpy(self.data[idx:idx + self.chunk_size].astype(np.int64))
-        y = torch.from_numpy(self.data[idx+1:idx + self.chunk_size+1].astype(np.int64))
-
-        return x.to(device=self.device, non_blocking=True), y.to(device=self.device, non_blocking=True)
+        x = self.data[idx      : idx + self.chunk_size    ].astype(np.int64, copy=False)
+        y = self.data[idx + 1  : idx + self.chunk_size + 1].astype(np.int64, copy=False)
+        return torch.from_numpy(x), torch.from_numpy(y)
 
 if __name__ == "__main__":
     _prepare()
