@@ -22,7 +22,7 @@ class MultiheadAttention(nn.Module):
         self.qkv = nn.Linear(args.n_dim, args.n_dim * 3)
         self.dropout = 0.1
 
-    def forward(self, x, mask: Optional[torch.Tensor] = None):
+    def forward(self, x):
         B, S, _ = x.shape  # Batch, Sequence
         H = self.args.n_heads # number of heads
         D = self.args.n_dim  # model dim
@@ -33,22 +33,7 @@ class MultiheadAttention(nn.Module):
 
         q, k, v = qkv.unbind(dim=2)
 
-        '''
-        original code before using flash attention:
-        
-        # Scaled-Dot-Product Attention
-        scores = (q @ k.transpose(-2, -1)) / math.sqrt(D_h)  # (B, H, S, S)
-
-        # mask
-        if mask is not None:
-            scores = scores + mask
-
-        weights = F.softmax(scores, dim=-1)
-        weights = self.dropout(weights)
-        context = weights @ v  # (B, H, S, D_h)
-        '''
-
-        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=mask, dropout_p=self.dropout) # using flash attention
+        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.dropout) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
 
         return context
@@ -79,8 +64,8 @@ class Block(nn.Module):
         self.norm1 = nn.LayerNorm(args.n_dim)
         self.norm2 = nn.LayerNorm(args.n_dim)
 
-    def forward(self, x, mask: Optional[torch.Tensor] = None):
-        x = x + self.attn(self.norm1(x), mask=mask)
+    def forward(self, x):
+        x = x + self.attn(self.norm1(x))
         x = x + self.mlp(self.norm2(x))
         return x
 
@@ -93,28 +78,26 @@ class Transformer(nn.Module):
         self.pos = nn.Embedding(args.max_seq_len, args.n_dim)
         self.norm = nn.LayerNorm(args.n_dim)
         self.blocks = nn.ModuleList([Block(args) for _ in range(args.n_blocks)])
-        self.fc = nn.Linear(args.n_dim, args.vocab_size)
+        self.fc = nn.Linear(args.n_dim, args.vocab_size, bias=False)
 
         self.fc.weight = self.tok.weight # weight tying significantly reduces number of parameters and improves performance
+        self.apply(self._init_weights)
 
     def forward(self, x: torch.Tensor, y: Optional[torch.Tensor] = None):
         B, S = x.shape
-
         h = self.tok(x)  # (B, S, D)
         h = h + self.pos(torch.arange(S, device=x.device))
         h = self.norm(h)
 
-        mask = None
-        if S > 1:
-            mask = torch.full((S, S), float("-inf"), device=x.device)
-            mask = torch.triu(mask, diagonal=1)  # upper-triangular
-
         for block in self.blocks:
-            h = block(h, mask=mask)
+            h = block(h)
 
         logits = self.fc(h)  # (B, S, V)
 
         if y is not None:
+            logits = logits[:, :-1, :].contiguous()
+            y = y[:, 1:].contiguous()
+
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),
                 y.view(-1)
@@ -122,6 +105,17 @@ class Transformer(nn.Module):
             return loss, logits
 
         return logits
+
+    @staticmethod
+    def _init_weights(m: nn.Module):
+        if isinstance(m, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+            if getattr(m, "bias", None) is not None:
+                nn.init.zeros_(m.bias)
+
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.ones_(m.weight)
+            nn.init.zeros_(m.bias)
 
     def generate(self, tokens: List[int], max_token_length: int, device):
         input_tensor = torch.tensor(tokens, device=device).unsqueeze(0)

@@ -40,6 +40,7 @@ class Tokenizer:
     def __len__(self) -> int:
         return self.model.n_vocab
 
+
     def encode(self, s: str, add_bos: bool = False,add_eos: bool = False,) -> List[int]:
         tokens: List[int] = []
         if add_bos:
