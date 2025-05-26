@@ -1,18 +1,13 @@
 import contextlib
 import os
-import time
 
-import numpy as np
 import torch
-import torch.nn.functional as F
-from torch import nn
-
-import wandb
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_cosine_schedule_with_warmup
 
+import wandb
 from dataset import BinDataset
 from model import Transformer, ModelArgs
 from tokenizer import Tokenizer
@@ -109,8 +104,8 @@ def estimate_loss():
     for step_idx in range(eval_iters):
         x, y = next(val_iter)
 
-        x = x.to(device)
-        y = y.to(device)
+        x = torch.tensor(x, device=device)
+        y = torch.tensor(y, device=device)
 
         with ctx:
             loss, _ = model(x, y)
@@ -133,8 +128,8 @@ def train():
     for step_idx in range(train_iters):
         x, y = next(train_iter)
 
-        x = x.to(device)
-        y = y.to(device)
+        x = torch.tensor(x, device=device)
+        y = torch.tensor(y, device=device)
 
         with ctx:
             loss, _ = model(x, y)
