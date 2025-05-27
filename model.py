@@ -14,6 +14,7 @@ class ModelArgs:
     n_heads: int = 8
     max_seq_len: int = 1024
     vocab_size: int = -1 # later defined by tokenizer
+    norm_eps: float = 1e-5
 
 class MultiheadAttention(nn.Module):
     def __init__(self, args: ModelArgs):
@@ -61,12 +62,12 @@ class Block(nn.Module):
         self.args = args
         self.attn = MultiheadAttention(args)
         self.mlp = MLP(args)
-        self.norm1 = nn.LayerNorm(args.n_dim)
-        self.norm2 = nn.LayerNorm(args.n_dim)
+        self.attn_norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
+        self.mlp_norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
 
     def forward(self, x):
-        x = x + self.attn(self.norm1(x))
-        x = x + self.mlp(self.norm2(x))
+        x = x + self.attn(self.attn_norm(x))
+        x = x + self.mlp(self.mlp_norm(x))
         return x
 
 
@@ -76,7 +77,7 @@ class Transformer(nn.Module):
         self.args = args
         self.tok = nn.Embedding(args.vocab_size, args.n_dim)
         self.pos = nn.Embedding(args.max_seq_len, args.n_dim)
-        self.norm = nn.LayerNorm(args.n_dim)
+        self.norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
         self.blocks = nn.ModuleList([Block(args) for _ in range(args.n_blocks)])
         self.fc = nn.Linear(args.n_dim, args.vocab_size, bias=False)
 
@@ -87,11 +88,11 @@ class Transformer(nn.Module):
         B, S = x.shape
         h = self.tok(x)  # (B, S, D)
         h = h + self.pos(torch.arange(S, device=x.device))
-        h = self.norm(h)
 
         for block in self.blocks:
             h = block(h)
 
+        h = self.norm(h)
         logits = self.fc(h)  # (B, S, V)
 
         if y is not None:
