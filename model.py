@@ -107,6 +107,24 @@ class Transformer(nn.Module):
 
         return logits
 
+    def get_optimizer_grouped_parameters(self, weight_decay=0.01):
+        decay = []
+        no_decay = []
+
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+
+            if any(nd in name.lower() for nd in ['bias', 'norm']):
+                no_decay.append(param)
+            else:
+                decay.append(param)
+
+        return [
+            {"params": decay, "weight_decay": weight_decay},
+            {"params": no_decay, "weight_decay": 0.0},
+        ]
+
     @staticmethod
     def _init_weights(m: nn.Module):
         if isinstance(m, (nn.Linear, nn.Embedding)):
