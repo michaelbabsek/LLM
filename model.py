@@ -15,13 +15,14 @@ class ModelArgs:
     max_seq_len: int = 1024
     vocab_size: int = -1 # later defined by tokenizer
     norm_eps: float = 1e-5
+    dropout: float = 0.1
 
 class MultiheadAttention(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
         self.args = args
         self.qkv = nn.Linear(args.n_dim, args.n_dim * 3)
-        self.dropout = 0.1
+        self.dropout = nn.Dropout(args.dropout)
 
     def forward(self, x):
         B, S, _ = x.shape  # Batch, Sequence
@@ -34,8 +35,9 @@ class MultiheadAttention(nn.Module):
 
         q, k, v = qkv.unbind(dim=2)
 
-        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.dropout) # using flash attention
+        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.args.dropout) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
+        context = self.dropout(context)
 
         return context
 
@@ -45,7 +47,7 @@ class MLP(nn.Module):
         self.args = args
         self.fc1 = nn.Linear(args.n_dim, args.n_dim * 4)
         self.fc2 = nn.Linear(args.n_dim * 4, args.n_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(self.args.dropout)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -77,6 +79,7 @@ class Transformer(nn.Module):
         self.args = args
         self.tok = nn.Embedding(args.vocab_size, args.n_dim)
         self.pos = nn.Embedding(args.max_seq_len, args.n_dim)
+        self.dropout = nn.Dropout(args.dropout)
         self.norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
         self.blocks = nn.ModuleList([Block(args) for _ in range(args.n_blocks)])
         self.fc = nn.Linear(args.n_dim, args.vocab_size, bias=False)
@@ -88,6 +91,7 @@ class Transformer(nn.Module):
         B, S = x.shape
         h = self.tok(x)  # (B, S, D)
         h = h + self.pos(torch.arange(S, device=x.device))
+        h = self.dropout(h)
 
         for block in self.blocks:
             h = block(h)
@@ -100,8 +104,9 @@ class Transformer(nn.Module):
             y = y[:, 1:].contiguous()
 
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                y.view(-1)
+                input=logits.view(-1, logits.size(-1)),
+                target=y.view(-1),
+                label_smoothing=0.1,
             )
             return loss, logits
 
