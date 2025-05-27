@@ -104,8 +104,8 @@ def estimate_loss():
     for step_idx in range(eval_iters):
         x, y = next(val_iter)
 
-        x = torch.tensor(x, device=device)
-        y = torch.tensor(y, device=device)
+        x = x.to(device)
+        y = y.to(device)
 
         with ctx:
             loss, _ = model(x, y)
@@ -128,8 +128,8 @@ def train():
     for step_idx in range(train_iters):
         x, y = next(train_iter)
 
-        x = torch.tensor(x, device=device)
-        y = torch.tensor(y, device=device)
+        x = x.to(device)
+        y = y.to(device)
 
         with ctx:
             loss, _ = model(x, y)

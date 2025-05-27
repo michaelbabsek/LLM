@@ -61,7 +61,7 @@ class BinDataset(Dataset):
     def __getitem__(self, idx):
         x = self.data[idx      : idx + self.chunk_size    ].astype(np.int64, copy=False)
         y = self.data[idx + 1  : idx + self.chunk_size + 1].astype(np.int64, copy=False)
-        return x, y
+        return torch.from_numpy(x), torch.from_numpy(y)
 
 if __name__ == "__main__":
     _prepare()
