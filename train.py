@@ -19,32 +19,24 @@ n_heads: int = 8
 max_seq_len: int = 1024
 
 # training
-train_iters: int = 60_000
+train_iters: int = 600_000
 eval_iters: int = 10
 eval_interval: int = 100
 warmup_frac: float = 0.1
 batch_size: int = 1
+grad_clip: float = 1.0
+
+# optimizer
 max_lr: float = 6e-4
+weight_decay: float = 1e-1
+beta1: float = 0.9
+beta2: float = 0.95
+eps: float =1e-8
+
 
 wandb.login()
 
-run = wandb.init(
-    project="LLM",
-    # Track hyperparameters and run metadata.
-    config={
-        'n_dim': n_dim,
-        'n_blocks': n_blocks,
-        'n_heads': n_heads,
-        'max_seq_len': max_seq_len,
-        'train_iters': train_iters,
-        'eval_iters': eval_iters,
-        'eval_interval': eval_interval,
-        'warmup_frac': warmup_frac,
-        'batch_size': batch_size,
-        'max_lr': max_lr,
-        'warmup_steps_percentage': warmup_frac
-    }
-)
+run = wandb.init(project="LLM")
 
 def get_device():
     if torch.cuda.is_available():
@@ -80,7 +72,12 @@ if os.path.exists('./model.pt'): # load model if existing
 
 print(f"Model parameters: {(sum(param.numel() for param in model.parameters())):,}")
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr)
+optimizer = torch.optim.AdamW(
+    params=model.get_optimizer_grouped_parameters(weight_decay=weight_decay),
+    betas=(beta1, beta2),
+    eps=eps,
+    lr=max_lr
+)
 
 scheduler = get_cosine_schedule_with_warmup(
     optimizer=optimizer,
@@ -138,12 +135,12 @@ def train():
 
             if cuda:
                 scaler.scale(loss).backward()
-                norm = clip_grad_norm_(model.parameters(), max_norm=1.0)
+                norm = clip_grad_norm_(model.parameters(), max_norm=grad_clip)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
-                norm = clip_grad_norm_(model.parameters(), max_norm=1.0)
+                norm = clip_grad_norm_(model.parameters(), max_norm=grad_clip)
                 optimizer.step()
 
         scheduler.step()
@@ -157,7 +154,7 @@ def train():
 
         wandb.log({
             "train/loss": step_loss,
-            "train/learning_rate": scheduler.get_last_lr(),
+            "train/learning_rate": optimizer.param_groups[0]['lr'],
             "train/norm": norm
         })
 
