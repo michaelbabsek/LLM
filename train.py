@@ -11,6 +11,7 @@ import wandb
 from dataset import BinDataset
 from model import Transformer, ModelArgs
 from tokenizer import Tokenizer
+from checkpoint import load_checkpoint
 
 #model args
 n_dim: int = 768
@@ -26,6 +27,7 @@ warmup_frac: float = 0.1
 batch_size: int = 1
 grad_clip: float = 1.0
 gradient_accumulation_steps = 32
+use_checkpoint: bool = True
 
 # optimizer
 max_lr: float = 6e-4
@@ -34,8 +36,6 @@ beta1: float = 0.9
 beta2: float = 0.95
 eps: float = 1e-8
 
-
-wandb.login()
 
 run = wandb.init(project="LLM")
 
@@ -63,15 +63,8 @@ model = Transformer(
     max_seq_len=max_seq_len,
     vocab_size=len(tokenizer))).to(device)
 
-print(model.args.vocab_size)
-
 if torch.__version__ >= "2.0" and device == "cuda":
     model.compile()
-
-if os.path.exists('./model.pt'): # load model if existing
-    model.load_state_dict(torch.load("model.pt", map_location=device))
-
-print(f"Model parameters: {(sum(param.numel() for param in model.parameters())):,}")
 
 optimizer = torch.optim.AdamW(
     params=model.get_optimizer_grouped_parameters(weight_decay=weight_decay),
@@ -91,7 +84,6 @@ val_data = BinDataset(chunk_size=max_seq_len, split="val", device=device)
 
 train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=False, pin_memory=cuda) #shuffling would take ages
 val_loader = DataLoader(dataset=val_data, batch_size=batch_size, shuffle=False, pin_memory=cuda)
-
 
 @torch.no_grad()
 def estimate_loss():
@@ -124,9 +116,21 @@ def train():
     total_loss = 0.0
     global_step = 0
 
+    step = load_checkpoint(
+        model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        scaler=scaler,
+        device=device,
+    )
+
     train_iter = iter(train_loader)
-    for step_idx in range(train_iters):
-        x, y = next(train_iter)
+    for step_idx in range(step, train_iters):
+        try:
+            x, y = next(train_iter)
+        except StopIteration:
+            train_iter = iter(train_loader)
+            x, y = next(train_iter)
 
         x = x.to(device)
         y = y.to(device)
