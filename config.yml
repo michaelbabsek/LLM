@@ -1,0 +1,31 @@
+run:
+  project: LLM                 # wandb-project
+  name:    null
+  seed:    42
+
+model:
+  n_dim:       768
+  n_blocks:    16
+  n_heads:     8
+  max_seq_len: 1024
+  vocab_size:  -1  # later defined by tokenizer
+  norm_eps:    1.0e-5
+  dropout:     0.1
+
+training:
+  train_iters:      128_000
+  eval_iters:       100
+  eval_interval:    320
+  warmup_frac:      0.1
+  batch_size:       1
+  grad_clip:        1.0
+  grad_accum_steps: 32
+  use_checkpoint:   true
+  ckpt_path:        ./checkpoint.pth
+
+optim:
+  max_lr:       6.0e-4
+  weight_decay: 1.0e-1
+  beta1:        0.9
+  beta2:        0.95
+  eps:          1.0e-8
