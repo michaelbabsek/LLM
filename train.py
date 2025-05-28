@@ -1,186 +1,71 @@
-import contextlib
-import os
 
-import torch
-from torch.nn.utils import clip_grad_norm_
+import contextlib, random, time, yaml, torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 from transformers import get_cosine_schedule_with_warmup
-
 import wandb
-from dataset import BinDataset
-from model import Transformer, ModelArgs
-from tokenizer import Tokenizer
 from checkpoint import load_checkpoint
+from dataset   import BinDataset
+from model     import Transformer
+from config import load_cfg, ModelCfg
 
-#model args
-n_dim: int = 768
-n_blocks: int = 16
-n_heads: int = 8
-max_seq_len: int = 1024
+from tokenizer import Tokenizer
+from trainer import Trainer
 
-# training
-train_iters: int = 128_000
-eval_iters: int = 100
-eval_interval: int = 320
-warmup_frac: float = 0.1
-batch_size: int = 1
-grad_clip: float = 1.0
-gradient_accumulation_steps = 32
-use_checkpoint: bool = True
+from dataclasses import asdict
 
-# optimizer
-max_lr: float = 6e-4
-weight_decay: float = 1e-1
-beta1: float = 0.9
-beta2: float = 0.95
-eps: float = 1e-8
+cfg = load_cfg()
 
+# ─────────────────── seeds + wandb
+torch.manual_seed(cfg.run.seed); random.seed(cfg.run.seed)
+run_name = cfg.run.name or time.strftime('%Y%m%d_%H%M%S')
 
-run = wandb.init(project="LLM")
+wandb.init( project=cfg.run.project, name=run_name, config=asdict(cfg))
 
-def get_device():
-    if torch.cuda.is_available():
-        return "cuda"
-    elif torch.backends.mps.is_available():
-        return "mps"
-    else:
-        return "cpu"
+# ─────────────────── device
+device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
+autocast_ctx   = torch.cuda.amp.autocast() if device=='cuda' else contextlib.nullcontext()
+scaler         = torch.cuda.amp.GradScaler() if device=='cuda' else None
 
-device = get_device()
-
-cuda = device == "cuda"
-ctx = torch.cuda.amp.autocast() if cuda else contextlib.nullcontext()
-scaler = torch.cuda.amp.GradScaler() if cuda else None
-
+# ─────────────────── tokenizer
 tokenizer = Tokenizer()
 
-model = Transformer(
-    args=ModelArgs(
-    n_dim=n_dim,
-    n_blocks=n_blocks,
-    n_heads=n_heads,
-    max_seq_len=max_seq_len,
-    vocab_size=len(tokenizer))).to(device)
+# ─────────────────── model
+model = Transformer(ModelCfg( vocab_size=len(tokenizer))).to(device)
+if torch.__version__ >= '2' and device=='cuda': model.compile()
 
-if torch.__version__ >= "2.0" and device == "cuda":
-    model.compile()
-
+# ─────────────────── optimizer + scheduler
 optimizer = torch.optim.AdamW(
-    params=model.get_optimizer_grouped_parameters(weight_decay=weight_decay),
-    betas=(beta1, beta2),
-    eps=eps,
-    lr=max_lr
-)
+    model.get_optimizer_grouped_parameters(cfg.optim.weight_decay),
+    lr=cfg.optim.max_lr, betas=(cfg.optim.beta1, cfg.optim.beta2), eps=cfg.optim.eps)
 
 scheduler = get_cosine_schedule_with_warmup(
-    optimizer=optimizer,
-    num_warmup_steps=train_iters * warmup_frac,
-    num_training_steps=train_iters / gradient_accumulation_steps, num_cycles=0.5
-)
+    optimizer, cfg.training.train_iters*cfg.training.warmup_frac,
+    cfg.training.train_iters//cfg.training.grad_accum_steps, num_cycles=0.5)
 
-train_data = BinDataset(chunk_size=max_seq_len, split="train", device=device)
-val_data = BinDataset(chunk_size=max_seq_len, split="val", device=device)
+# ─────────────────── resume?
+start_step = 0
+if cfg.training.use_checkpoint:
+    start_step = load_checkpoint(model, optimizer, scheduler, scaler, cfg.training.ckpt_path, device)
 
-train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=False, pin_memory=cuda) #shuffling would take ages
-val_loader = DataLoader(dataset=val_data, batch_size=batch_size, shuffle=False, pin_memory=cuda)
-
-@torch.no_grad()
-def estimate_loss():
-    model.eval()
-    pbar = tqdm(total=eval_iters, desc="Evaluating")
-    total_loss = 0.0
-    val_iter = iter(val_loader)
-    for step_idx in range(eval_iters):
-        x, y = next(val_iter)
-
-        x = x.to(device)
-        y = y.to(device)
-
-        with ctx:
-            loss, _ = model(x, y)
-
-        total_loss += loss.item()
-        pbar.update(1)
-
-    pbar.close()
-    model.train()
-    return total_loss / eval_iters # avg val loss
+# ─────────────────── data
+train_ds = BinDataset(chunk_size=cfg.model.max_seq_len, split='train', device=device)
+val_ds   = BinDataset(chunk_size=cfg.model.max_seq_len, split='val',   device=device)
+train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, shuffle=False, pin_memory=device=='cuda')
+val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, shuffle=False, pin_memory=device=='cuda')
 
 
-def train():
-    torch.set_float32_matmul_precision('high')
-    model.train()
-
-    pbar = tqdm(total=train_iters, desc="Training")
-    total_loss = 0.0
-    global_step = 0
-
-    step = load_checkpoint(
+if __name__ == "__main__":
+    trainer = Trainer(
+        cfg=cfg,
         model=model,
         optimizer=optimizer,
         scheduler=scheduler,
         scaler=scaler,
+        ctx=autocast_ctx,
         device=device,
+        train_dl=train_dl,
+        val_dl=val_dl,
+
     )
 
-    train_iter = iter(train_loader)
-    for step_idx in range(step, train_iters):
-        try:
-            x, y = next(train_iter)
-        except StopIteration:
-            train_iter = iter(train_loader)
-            x, y = next(train_iter)
-
-        x = x.to(device)
-        y = y.to(device)
-
-        with ctx:
-            loss, _ = model(x, y)
-
-            step_loss = loss.item()
-            total_loss += step_loss
-
-            loss = loss / gradient_accumulation_steps # loss for optimizer based on accumulation steps
-
-            if cuda:
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
-
-            if (step_idx + 1) % gradient_accumulation_steps == 0:
-                if cuda:
-                    scaler.unscale_(optimizer)
-                    norm = clip_grad_norm_(model.parameters(), grad_clip)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    norm = clip_grad_norm_(model.parameters(), grad_clip)
-                    optimizer.step()
-
-                optimizer.zero_grad()
-                scheduler.step()
-
-                wandb.log({
-                    "train/loss": step_loss,
-                    "train/learning_rate": optimizer.param_groups[0]['lr'],
-                    "train/norm": norm
-                }, step=global_step)
-
-                global_step += 1
-
-        pbar.update(1)
-        pbar.set_postfix(step_loss=f"{step_loss:.4f}")
-
-        if (step_idx + 1) % eval_interval == 0:
-            val_loss = estimate_loss()
-            val_perplexity = torch.exp(torch.tensor(val_loss)).item()
-            wandb.log({
-                "val/loss": val_loss,
-                "val/perplexity": val_perplexity
-            }, step=global_step)
-
-    pbar.close()
-
-if __name__ == "__main__":
-    train()
+    trainer.train(start_step=start_step)

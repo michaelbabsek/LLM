@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 
 import torch
+from torch.cuda.amp import autocast, GradScaler
+from torch.optim.lr_scheduler import LambdaLR
 
 
 @dataclass
@@ -20,8 +22,8 @@ def save_checkpoint(
         step: int,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        scheduler,
-        scaler=None,
+        scheduler: LambdaLR,
+        scaler: GradScaler,
         path: str = CKPT_PATH) -> None:
 
     state = Checkpoint(

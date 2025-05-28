@@ -4,21 +4,13 @@ from typing import List, Optional
 import torch
 from torch import nn
 from dataclasses import dataclass
+
+from config import ModelCfg
 from tokenizer import Tokenizer
 import torch.nn.functional as F
 
-@dataclass
-class ModelArgs:
-    n_dim: int = 768
-    n_blocks: int = 16
-    n_heads: int = 8
-    max_seq_len: int = 1024
-    vocab_size: int = -1 # later defined by tokenizer
-    norm_eps: float = 1e-5
-    dropout: float = 0.1
-
 class MultiheadAttention(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelCfg):
         super().__init__()
         self.args = args
         self.qkv = nn.Linear(args.n_dim, args.n_dim * 3)
@@ -42,7 +34,7 @@ class MultiheadAttention(nn.Module):
         return context
 
 class MLP(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelCfg):
         super().__init__()
         self.args = args
         self.fc1 = nn.Linear(args.n_dim, args.n_dim * 4)
@@ -59,7 +51,7 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelCfg):
         super().__init__()
         self.args = args
         self.attn = MultiheadAttention(args)
@@ -74,7 +66,7 @@ class Block(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args: ModelCfg):
         super().__init__()
         self.args = args
         self.tok = nn.Embedding(args.vocab_size, args.n_dim)
