@@ -109,7 +109,7 @@ class Trainer:
 
             pbar.set_postfix(loss=f"{loss.item():.4f}")
 
-            if (step_idx + 1) % self.cfg.training.eval_interval == 0:
+            if (step_idx + 1) % self.cfg.training.eval_interval == 0: # evaluate the model
                 val_loss = self._evaluate()
                 wandb.log(
                     {
