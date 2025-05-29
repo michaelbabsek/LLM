@@ -4,7 +4,6 @@ from typing import Dict, Any, Optional
 
 import torch
 from torch.cuda.amp import GradScaler
-from torch.distributed.tensor.parallel import loss_parallel
 from torch.optim.lr_scheduler import LambdaLR
 
 

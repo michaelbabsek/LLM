@@ -1,6 +1,6 @@
 run:
   project: LLM                 # wandb-project
-  name:    null
+  name:    Main
   seed:    42
 
 model:
@@ -13,9 +13,9 @@ model:
   dropout:     0.1
 
 training:
-  train_iters:      128_000
+  train_iters:      512000 # should be a multiple of accumulation steps
   eval_iters:       100
-  eval_interval:    320
+  eval_interval:    320 # should be a multiple of accumulation steps
   warmup_frac:      0.1
   batch_size:       1
   grad_clip:        1.0
