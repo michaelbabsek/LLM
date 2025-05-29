@@ -1,17 +1,20 @@
 
-import contextlib, random, time, yaml, torch
+import contextlib
+import random
+import time
+import torch
+from dataclasses import asdict
+
 from torch.utils.data import DataLoader
 from transformers import get_cosine_schedule_with_warmup
+
 import wandb
 from checkpoint import load_checkpoint
-from dataset   import BinDataset
-from model     import Transformer
 from config import load_cfg, ModelCfg
-
+from dataset import BinDataset
+from model import Transformer
 from tokenizer import Tokenizer
 from trainer import Trainer
-
-from dataclasses import asdict
 
 cfg = load_cfg()
 
@@ -44,8 +47,11 @@ scheduler = get_cosine_schedule_with_warmup(
 
 # ─────────────────── resume?
 start_step = 0
+last_loss = float('inf')
 if cfg.training.use_checkpoint:
-    start_step = load_checkpoint(model, optimizer, scheduler, scaler, cfg.training.ckpt_path, device)
+    ckpt = load_checkpoint(model, optimizer, scheduler, scaler, cfg.training.ckpt_path, device)
+    start_step = ckpt['step']
+    last_loss = ckpt['loss']
 
 # ─────────────────── data
 train_ds = BinDataset(chunk_size=cfg.model.max_seq_len, split='train', device=device)
@@ -68,4 +74,4 @@ if __name__ == "__main__":
 
     )
 
-    trainer.train(start_step=start_step)
+    trainer.train(start_step=start_step, last_loss=last_loss)

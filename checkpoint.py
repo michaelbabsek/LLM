@@ -3,13 +3,15 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 
 import torch
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
+from torch.distributed.tensor.parallel import loss_parallel
 from torch.optim.lr_scheduler import LambdaLR
 
 
 @dataclass
 class Checkpoint:
     step: int
+    loss: float
     model: Dict[str, Any]
     optimizer: Dict[str, Any]
     scheduler: Dict[str, Any]
@@ -20,6 +22,7 @@ CKPT_PATH = "checkpoint.pth"
 
 def save_checkpoint(
         step: int,
+        loss: float,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         scheduler: LambdaLR,
@@ -28,6 +31,7 @@ def save_checkpoint(
 
     state = Checkpoint(
         step=step,
+        loss=loss,
         model=model.state_dict(),
         optimizer=optimizer.state_dict(),
         scheduler=scheduler.state_dict(),
@@ -42,10 +46,10 @@ def load_checkpoint(
         scheduler,
         scaler=None,
         path: str = CKPT_PATH,
-        device: str = "cpu") -> int:
+        device: str = "cpu") -> Dict[str, Any]:
 
     if not os.path.exists(path):
-        return 0  # Training from scratch
+        return {'step': 0, 'loss': float('inf')} # Training from scratch
 
     ckpt = torch.load(path, map_location=device)
 
@@ -56,4 +60,4 @@ def load_checkpoint(
     if scaler is not None and ckpt.get("scaler") is not None:
         scaler.load_state_dict(ckpt["scaler"])
 
-    return ckpt["step"]
+    return {'step': ckpt["step"], 'loss': ckpt["loss"]}
