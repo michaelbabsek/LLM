@@ -1,3 +1,5 @@
+import contextlib
+import itertools
 from typing import Optional
 
 import torch
@@ -6,11 +8,12 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
-from torchvision.transforms.v2 import Lambda
 from tqdm import tqdm
-import wandb
 
+import wandb
+from checkpoint import save_checkpoint
 from config import Config
+
 
 class Trainer:
     def __init__(
@@ -22,7 +25,7 @@ class Trainer:
             train_dl: DataLoader,
             val_dl: DataLoader,
             scaler: Optional[GradScaler] = None,
-            ctx: Optional[autocast] = None,
+            ctx: Optional[autocast] = contextlib.nullcontext(),
             device: Optional[str] = "cpu",
     ):
         self.cfg = cfg
@@ -35,90 +38,97 @@ class Trainer:
         self.val_dl = val_dl
         self.device = device
 
-    @torch.no_grad()
-    def estimate_loss(self):
+        self.model.to(self.device)
+        self.train_iter = itertools.cycle(self.train_dl)
+        self.val_iter = itertools.cycle(self.val_dl)
+
+    # ─────────────────── helper functions to clean up code
+    def _move(self, batch):
+        x, y = batch
+        return x.to(self.device), y.to(self.device)
+
+    def _forward(self, x, y):
+        with self.ctx:
+            loss, logits = self.model(x, y)
+        return loss
+
+    def _backward(self, loss):
+        loss = loss / self.cfg.training.grad_accum_steps
+        if self.scaler:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+    def _opt_step(self):
+        if self.scaler:
+            self.scaler.unscale_(self.optimizer)
+        grad_norm = clip_grad_norm_(self.model.parameters(), self.cfg.training.grad_clip)
+
+        if self.scaler:
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            self.optimizer.step()
+
+        self.optimizer.zero_grad(set_to_none=True)
+        self.scheduler.step()
+        return grad_norm
+
+    def _evaluate(self):
         self.model.eval()
-        pbar = tqdm(total=self.cfg.training.eval_iters, desc="Evaluating")
-        total_loss = 0.0
-        val_iter = iter(self.val_dl)
-        for step_idx in range(self.cfg.training.eval_iters):
-            x, y = next(val_iter)
-
-            x = x.to(self.device)
-            y = y.to(self.device)
-
-            with self.ctx:
-                loss, _ = self.model(x, y)
-
-            total_loss += loss.item()
-            pbar.update(1)
-
-        pbar.close()
+        losses = []
+        with torch.no_grad():
+            for _ in range(self.cfg.training.eval_iters):
+                loss = self._forward(*self._move(next(self.val_iter)))
+                losses.append(loss.detach())
         self.model.train()
-        return total_loss / self.cfg.training.eval_iters  # avg val loss
+        return torch.mean(torch.stack(losses)).item()
 
-    def train(self, start_step):
-        torch.set_float32_matmul_precision('high')
-        self.model.train()
+    # ─────────────────── training loop
+    def train(self, start_step: int = 0, last_loss: float = float("inf")):
+        torch.set_float32_matmul_precision("high")
+        pbar = tqdm(range(start_step, self.cfg.training.train_iters), desc="Training")
 
-        pbar = tqdm(total=self.cfg.training.train_iters, desc="Training")
-        total_loss = 0.0
-        global_step = 0
+        accum_step = 0
+        for step_idx in pbar:
+            loss = self._forward(*self._move(next(self.train_iter)))
+            self._backward(loss)
+            accum_step += 1
 
-        train_iter = iter(self.train_dl)
-        for step_idx in range(start_step, self.cfg.training.train_iters):
-            try:
-                x, y = next(train_iter)
-            except StopIteration:
-                train_iter = iter(self.train_dl)
-                x, y = next(train_iter)
+            if accum_step % self.cfg.training.grad_accum_steps == 0:
+                grad_norm = self._opt_step()
+                wandb.log(
+                    {
+                        "train/loss": loss.item(),
+                        "train/lr": self.optimizer.param_groups[0]["lr"],
+                        "train/grad_norm": grad_norm,
+                    },
+                    step=step_idx,
+                )
+                accum_step = 0
 
-            x = x.to(self.device)
-            y = y.to(self.device)
-
-            with self.ctx:
-                loss, _ = self.model(x, y)
-
-                step_loss = loss.item()
-                total_loss += step_loss
-
-                loss = loss / self.cfg.training.grad_accum_steps  # loss for optimizer based on accumulation steps
-
-                if self.scaler:
-                    self.scaler.scale(loss).backward()
-                else:
-                    loss.backward()
-
-                if (step_idx + 1) % self.cfg.training.grad_accum_steps == 0:
-                    if self.scaler:
-                        self.scaler.unscale_(self.optimizer)
-                        norm = clip_grad_norm_(self.model.parameters(), self.cfg.training.grad_clip)
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
-                    else:
-                        norm = clip_grad_norm_(self.model.parameters(), self.cfg.training.grad_clip)
-                        self.optimizer.step()
-
-                    self.optimizer.zero_grad()
-                    self.scheduler.step()
-
-                    wandb.log({
-                        "train/loss": step_loss,
-                        "train/learning_rate": self.optimizer.param_groups[0]['lr'],
-                        "train/norm": norm
-                    }, step=global_step)
-
-                    global_step += 1
-
-            pbar.update(1)
-            pbar.set_postfix(step_loss=f"{step_loss:.4f}")
+            pbar.set_postfix(loss=f"{loss.item():.4f}")
 
             if (step_idx + 1) % self.cfg.training.eval_interval == 0:
-                val_loss = self.estimate_loss()
-                val_perplexity = torch.exp(torch.tensor(val_loss)).item()
-                wandb.log({
-                    "val/loss": val_loss,
-                    "val/perplexity": val_perplexity
-                }, step=global_step)
+                val_loss = self._evaluate()
+                wandb.log(
+                    {
+                        "val/loss": val_loss,
+                        "val/perplexity": torch.exp(torch.tensor(val_loss)).item(),
+                    },
+                    step=step_idx,
+                )
+
+                if val_loss < last_loss: # save model if improved
+                    save_checkpoint(
+                        step=step_idx,
+                        loss=val_loss,
+                        model=self.model,
+                        optimizer=self.optimizer,
+                        scheduler=self.scheduler,
+                        scaler=self.scaler,
+                    )
+
+                    last_loss = val_loss
 
         pbar.close()
