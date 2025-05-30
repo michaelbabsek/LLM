@@ -1,13 +1,11 @@
-import math
 from typing import List, Optional
 
 import torch
+import torch.nn.functional as F
 from torch import nn
-from dataclasses import dataclass
 
 from config import ModelCfg
-from tokenizer import Tokenizer
-import torch.nn.functional as F
+
 
 class MultiheadAttention(nn.Module):
     def __init__(self, args: ModelCfg):
