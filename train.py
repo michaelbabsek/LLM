@@ -26,7 +26,7 @@ wandb.init( project=cfg.run.project, name=run_name, config=asdict(cfg))
 
 # ─────────────────── device
 device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
-autocast_ctx   = torch.amp.autocast(device_type=device) if device=='cuda' else contextlib.nullcontext()
+autocast_ctx   = torch.amp.autocast('cuda', dtype=torch.bfloat16) if device=='cuda' else contextlib.nullcontext()
 scaler         = torch.amp.GradScaler() if device=='cuda' else None
 
 # ─────────────────── tokenizer
