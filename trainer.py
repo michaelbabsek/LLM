@@ -53,7 +53,7 @@ class Trainer:
         return loss
 
     def _backward(self, loss):
-        loss = loss / self.cfg.training.grad_accum_steps
+        loss = loss
         if self.scaler:
             self.scaler.scale(loss).backward()
         else:
@@ -92,21 +92,21 @@ class Trainer:
         for step_idx in pbar:
             step_loss = 0.0
             for micro_step in range(self.cfg.training.grad_accum_steps):
-                loss = self._forward(*self._move(next(self.train_iter)))
+                loss = self._forward(*self._move(next(self.train_iter))) / self.cfg.training.grad_accum_steps
                 self._backward(loss)
                 step_loss += loss.item()
 
             grad_norm = self._opt_step()
 
-            wandb.log(
-                {
-                    "train/loss": step_loss,
-                    "train/lr": self.optimizer.param_groups[0]["lr"],
-                    "train/grad_norm": grad_norm,
-                },
-                step=step_idx,
-                commit=(step_idx % self.cfg.run.log_interval == 0)
-            )
+            if step_idx % self.cfg.run.log_interval == 0:  # ← only every N steps
+                wandb.log(
+                    {
+                        "train/loss": step_loss,
+                        "train/lr": self.optimizer.param_groups[0]["lr"],
+                        "train/grad_norm": grad_norm,
+                    },
+                    step=step_idx,
+                )
 
             pbar.set_postfix(loss=f"{step_loss:.4f}")
 
