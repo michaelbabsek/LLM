@@ -2,7 +2,6 @@ from typing import List, Sequence
 
 import tiktoken
 
-
 class Tokenizer:
     def __init__(self, model: str = "cl100k_base"): # use gpt-4 base model
         basemodel = tiktoken.get_encoding(model)
