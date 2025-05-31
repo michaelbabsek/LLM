@@ -3,9 +3,8 @@ from typing import List, Optional
 import torch
 import torch.nn.functional as F
 from torch import nn
-
+from torch.fft import Tensor
 from config import ModelCfg
-
 
 class MultiheadAttention(nn.Module):
     def __init__(self, args: ModelCfg):
