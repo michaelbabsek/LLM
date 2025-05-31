@@ -1,10 +1,12 @@
-from typing import List, Optional
+from tkinter.font import names
+from typing import List, Optional, Dict
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.fft import Tensor
+
 from config import ModelCfg
+
 
 class MultiheadAttention(nn.Module):
     def __init__(self, args: ModelCfg):
@@ -101,18 +103,20 @@ class Transformer(nn.Module):
 
         return logits
 
-    def get_optimizer_grouped_parameters(self, weight_decay=0.01):
-        decay = []
-        no_decay = []
+    def get_optimizer_grouped_parameters(self, weight_decay: float = 0.01) -> List[Dict]:
+        decay, no_decay, seen = [], [], set()
+        skip_modules = (nn.LayerNorm, nn.RMSNorm, nn.Embedding)
 
-        for name, param in self.named_parameters():
-            if not param.requires_grad:
-                continue
+        for module_name, module in self.named_modules():
+            for param_name, param in module.named_parameters(recurse=False):
+                if id(param) in seen or not param.requires_grad:
+                    continue
+                seen.add(id(param))
 
-            if any(nd in name.lower() for nd in ['bias', 'norm']):
-                no_decay.append(param)
-            else:
-                decay.append(param)
+                if isinstance(module, skip_modules) or param.dim() == 1:
+                    no_decay.append(param)
+                else:
+                    decay.append(param)
 
         return [
             {"params": decay, "weight_decay": weight_decay},
