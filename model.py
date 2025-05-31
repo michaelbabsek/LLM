@@ -43,7 +43,6 @@ class MLP(nn.Module):
     def forward(self, x):
         x = self.fc1(x)
         x = F.gelu(x)
-        x = self.dropout(x)
         x = self.fc2(x)
         x = self.dropout(x)
         return x
