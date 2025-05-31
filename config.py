@@ -9,6 +9,7 @@ class RunCfg:
     project: str = 'LLM'
     name: str | None = None
     seed: int = 42
+    log_interval: int = 10
 
 
 @dataclass
