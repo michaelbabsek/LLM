@@ -49,7 +49,7 @@ class Trainer:
 
     def _forward(self, x, y):
         with self.ctx:
-            loss, logits = self.model(x, y)
+            loss, _ = self.model(x, y)
         return loss
 
     def _backward(self, loss):
@@ -89,25 +89,24 @@ class Trainer:
         torch.set_float32_matmul_precision("high")
         pbar = tqdm(range(start_step, self.cfg.training.train_iters), desc="Training")
 
-        accum_step = 0
         for step_idx in pbar:
-            loss = self._forward(*self._move(next(self.train_iter)))
-            self._backward(loss)
-            accum_step += 1
+            step_loss = 0.0
+            for micro_step in range(self.cfg.training.grad_accum_steps):
+                loss = self._forward(*self._move(next(self.train_iter))) / self.cfg.training.grad_accum_steps
+                loss.backward()
+                step_loss += loss.item()
 
-            if accum_step % self.cfg.training.grad_accum_steps == 0:
-                grad_norm = self._opt_step()
-                wandb.log(
-                    {
-                        "train/loss": loss.item(),
-                        "train/lr": self.optimizer.param_groups[0]["lr"],
-                        "train/grad_norm": grad_norm,
-                    },
-                    step=step_idx,
-                )
-                accum_step = 0
+            grad_norm = self._opt_step()
+            wandb.log(
+                {
+                    "train/loss": step_loss,
+                    "train/lr": self.optimizer.param_groups[0]["lr"],
+                    "train/grad_norm": grad_norm,
+                },
+                step=step_idx,
+            )
 
-            pbar.set_postfix(loss=f"{loss.item():.4f}")
+            pbar.set_postfix(loss=f"{step_loss:.4f}")
 
             if step_idx % self.cfg.training.eval_interval == 0: # evaluate the model (also does it at the beginning to not have missing data in visualization)
                 val_loss = self._evaluate()

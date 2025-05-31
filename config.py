@@ -27,7 +27,7 @@ class TrainCfg:
     train_iters: int = 128_000
     eval_iters: int = 100
     eval_interval: int = 320
-    warmup_frac: float = 0.1
+    warmup_iters: int = 2000
     batch_size: int = 1
     grad_clip: float = 1.0
     grad_accum_steps: int = 32
