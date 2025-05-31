@@ -1,12 +1,12 @@
 
 import contextlib
+import math
 import random
 import time
-import torch
 from dataclasses import asdict
 
+import torch
 from torch.utils.data import DataLoader
-from transformers import get_cosine_schedule_with_warmup
 
 import wandb
 from checkpoint import load_checkpoint
@@ -41,9 +41,14 @@ optimizer = torch.optim.AdamW(
     model.get_optimizer_grouped_parameters(cfg.optim.weight_decay),
     lr=cfg.optim.max_lr, betas=(cfg.optim.beta1, cfg.optim.beta2), eps=cfg.optim.eps)
 
-scheduler = get_cosine_schedule_with_warmup(
-    optimizer, cfg.training.warmup_iters,
-    cfg.training.train_iters//cfg.training.grad_accum_steps, num_cycles=0.5)
+def lr_lambda(step_idx):
+    if step_idx < cfg.training.warmup_iters:
+        return step_idx / cfg.training.warmup_iters
+    progress = (step_idx - cfg.training.warmup_iters) / (cfg.training.train_iters - cfg.training.warmup_iters)
+    cosine = 0.5 * (1 + math.cos(math.pi * progress))
+    return (cfg.optim.min_lr / cfg.optim.max_lr) + (1 - cfg.optim.min_lr / cfg.optim.max_lr) * cosine
+
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 # ─────────────────── resume?
 start_step = 0

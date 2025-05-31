@@ -10,7 +10,7 @@ model:
   max_seq_len: 1024
   vocab_size:  -1  # later defined by tokenizer
   norm_eps:    1.0e-5
-  dropout:     0.1
+  dropout:     0.0 # good for pretraining, 0.1 for finetuning
   bias: False
 
 training:
@@ -26,6 +26,7 @@ training:
 
 optim:
   max_lr:       6.0e-4
+  min_lr:       6.0e-5 # should be ~max_lr/10
   weight_decay: 1.0e-1
   beta1:        0.9
   beta2:        0.95
