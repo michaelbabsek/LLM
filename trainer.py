@@ -98,7 +98,7 @@ class Trainer:
 
             grad_norm = self._opt_step()
 
-            if step_idx % self.cfg.run.log_interval == 0:  # ← only every N steps
+            if step_idx % self.cfg.run.log_interval == 0:
                 wandb.log(
                     {
                         "train/loss": step_loss,
