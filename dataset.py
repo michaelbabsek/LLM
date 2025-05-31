@@ -33,8 +33,10 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
 
     for split, dset in tokenized.items():
         arr_len = np.sum(dset['len'], dtype=np.uint64)
-        filename = os.path.join(os.path.dirname("./dataset"), f'{split}.bin')
-        arr = np.memmap(filename, dtype=np.int32, mode='w+',
+        out_dir = "./dataset"
+        os.makedirs(out_dir, exist_ok=True)
+        filename = os.path.join(out_dir, f"{split}.bin")
+        arr = np.memmap(filename, dtype=np.uint32, mode='w+',
                         shape=(arr_len,))  # int16 won't work since 2^16 < 100277 (vocab size)
         total_shards = 1024
 
@@ -51,12 +53,12 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
 class BinDataset(Dataset):
     def __init__(self, chunk_size: int, split: str, device = "cpu"):
         super().__init__()
-        self.data = np.memmap(filename=f"{split}.bin", dtype=np.uint32, mode="r")
+        self.data = np.memmap(filename=f"./dataset/{split}.bin", dtype=np.uint32, mode="r")
         self.chunk_size = chunk_size
         self.device = device
 
     def __len__(self):
-        return len(self.data) - self.chunk_size
+        return max(0, len(self.data) - self.chunk_size)
 
     def __getitem__(self, idx):
         x = self.data[idx      : idx + self.chunk_size    ].astype(np.int64, copy=False)
