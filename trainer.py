@@ -92,7 +92,7 @@ class Trainer:
         for step_idx in pbar:
             step_loss = 0.0
             for micro_step in range(self.cfg.training.grad_accum_steps):
-                loss = self._forward(*self._move(next(self.train_iter))) / self.cfg.training.grad_accum_steps
+                loss = self._forward(*self._move(next(self.train_iter)))
                 self._backward(loss)
                 step_loss += loss.item()
 
