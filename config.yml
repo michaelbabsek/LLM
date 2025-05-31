@@ -27,7 +27,7 @@ training:
 optim:
   max_lr:       6.0e-4
   min_lr:       6.0e-5 # should be ~max_lr/10
-  weight_decay: 1.0e-1
+  weight_decay: 1.0e-3
   beta1:        0.9
   beta2:        0.95
   eps:          1.0e-8
