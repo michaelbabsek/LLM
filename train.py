@@ -26,8 +26,8 @@ wandb.init( project=cfg.run.project, name=run_name, config=asdict(cfg))
 
 # ─────────────────── device
 device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
-autocast_ctx   = torch.cuda.amp.autocast() if device=='cuda' else contextlib.nullcontext()
-scaler         = torch.cuda.amp.GradScaler() if device=='cuda' else None
+autocast_ctx   = torch.amp.autocast(device_type=device) if device=='cuda' else contextlib.nullcontext()
+scaler         = torch.amp.GradScaler() if device=='cuda' else None
 
 # ─────────────────── tokenizer
 tokenizer = Tokenizer()
@@ -42,7 +42,7 @@ optimizer = torch.optim.AdamW(
     lr=cfg.optim.max_lr, betas=(cfg.optim.beta1, cfg.optim.beta2), eps=cfg.optim.eps)
 
 scheduler = get_cosine_schedule_with_warmup(
-    optimizer, cfg.training.train_iters*cfg.training.warmup_frac,
+    optimizer, cfg.training.warmup_iters,
     cfg.training.train_iters//cfg.training.grad_accum_steps, num_cycles=0.5)
 
 # ─────────────────── resume?
