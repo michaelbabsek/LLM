@@ -11,7 +11,7 @@ class MultiheadAttention(nn.Module):
     def __init__(self, args: ModelCfg):
         super().__init__()
         self.args = args
-        self.qkv = nn.Linear(args.n_dim, args.n_dim * 3)
+        self.qkv = nn.Linear(args.n_dim, args.n_dim * 3, bias=args.bias)
         self.dropout = nn.Dropout(args.dropout)
 
     def forward(self, x):
@@ -35,8 +35,8 @@ class MLP(nn.Module):
     def __init__(self, args: ModelCfg):
         super().__init__()
         self.args = args
-        self.fc1 = nn.Linear(args.n_dim, args.n_dim * 4)
-        self.fc2 = nn.Linear(args.n_dim * 4, args.n_dim)
+        self.fc1 = nn.Linear(args.n_dim, args.n_dim * 4, bias=args.bias)
+        self.fc2 = nn.Linear(args.n_dim * 4, args.n_dim, bias=args.bias)
         self.dropout = nn.Dropout(self.args.dropout)
 
     def forward(self, x):
@@ -72,7 +72,7 @@ class Transformer(nn.Module):
         self.dropout = nn.Dropout(args.dropout)
         self.norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
         self.blocks = nn.ModuleList([Block(args) for _ in range(args.n_blocks)])
-        self.fc = nn.Linear(args.n_dim, args.vocab_size, bias=False)
+        self.fc = nn.Linear(args.n_dim, args.vocab_size, bias=args.bias)
 
         self.fc.weight = self.tok.weight # weight tying significantly reduces number of parameters and improves performance
         self.apply(self._init_weights)

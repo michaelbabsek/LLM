@@ -20,6 +20,7 @@ class ModelCfg:
     vocab_size: int = -1  # later defined by tokenizer
     norm_eps: float = 1e-5
     dropout: float = 0.1
+    bias: bool = False
 
 
 @dataclass
