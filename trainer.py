@@ -97,6 +97,7 @@ class Trainer:
                 step_loss += loss.item()
 
             grad_norm = self._opt_step()
+
             wandb.log(
                 {
                     "train/loss": step_loss,
@@ -104,6 +105,7 @@ class Trainer:
                     "train/grad_norm": grad_norm,
                 },
                 step=step_idx,
+                commit=(step_idx % self.cfg.run.log_interval == 0)
             )
 
             pbar.set_postfix(loss=f"{step_loss:.4f}")

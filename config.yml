@@ -2,6 +2,7 @@ run:
   project: LLM                 # wandb-project
   name:    test-1
   seed:    42
+  log_interval: 10
 
 model:
   n_dim:       768
