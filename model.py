@@ -8,16 +8,16 @@ from config import ModelCfg
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, args: ModelCfg):
+    def __init__(self, cfg: ModelCfg):
         super().__init__()
-        self.args = args
-        self.qkv = nn.Linear(args.n_dim, args.n_dim * 3, bias=args.bias)
-        self.dropout = nn.Dropout(args.dropout)
+        self.cfg = cfg
+        self.qkv = nn.Linear(cfg.n_dim, cfg.n_dim * 3, bias=cfg.bias)
+        self.dropout = nn.Dropout(cfg.dropout)
 
     def forward(self, x):
         B, S, _ = x.shape  # Batch, Sequence
-        H = self.args.n_heads # number of heads
-        D = self.args.n_dim  # model dim
+        H = self.cfg.n_heads # number of heads
+        D = self.cfg.n_dim  # model dim
         D_h = D // H  # head dim
 
         qkv = self.qkv(x)
@@ -25,19 +25,19 @@ class MultiheadAttention(nn.Module):
 
         q, k, v = qkv.unbind(dim=2)
 
-        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.args.dropout) # using flash attention
+        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.cfg.dropout) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
         context = self.dropout(context)
 
         return context
 
 class MLP(nn.Module):
-    def __init__(self, args: ModelCfg):
+    def __init__(self, cfg: ModelCfg):
         super().__init__()
-        self.args = args
-        self.fc1 = nn.Linear(args.n_dim, args.n_dim * 4, bias=args.bias)
-        self.fc2 = nn.Linear(args.n_dim * 4, args.n_dim, bias=args.bias)
-        self.dropout = nn.Dropout(self.args.dropout)
+        self.cfg = cfg
+        self.fc1 = nn.Linear(cfg.n_dim, cfg.n_dim * 4, bias=cfg.bias)
+        self.fc2 = nn.Linear(cfg.n_dim * 4, cfg.n_dim, bias=cfg.bias)
+        self.dropout = nn.Dropout(self.cfg.dropout)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -48,13 +48,13 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, args: ModelCfg):
+    def __init__(self, cfg: ModelCfg):
         super().__init__()
-        self.args = args
-        self.attn = MultiheadAttention(args)
-        self.mlp = MLP(args)
-        self.attn_norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
-        self.mlp_norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
+        self.cfg = cfg
+        self.attn = MultiheadAttention(cfg)
+        self.mlp = MLP(cfg)
+        self.attn_norm = nn.RMSNorm(cfg.n_dim, eps=cfg.norm_eps)
+        self.mlp_norm = nn.RMSNorm(cfg.n_dim, eps=cfg.norm_eps)
 
     def forward(self, x):
         x = x + self.attn(self.attn_norm(x))
@@ -63,15 +63,15 @@ class Block(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, args: ModelCfg):
+    def __init__(self, cfg: ModelCfg):
         super().__init__()
-        self.args = args
-        self.tok = nn.Embedding(args.vocab_size, args.n_dim)
-        self.pos = nn.Embedding(args.max_seq_len, args.n_dim)
-        self.dropout = nn.Dropout(args.dropout)
-        self.norm = nn.RMSNorm(args.n_dim, eps=args.norm_eps)
-        self.blocks = nn.ModuleList([Block(args) for _ in range(args.n_blocks)])
-        self.fc = nn.Linear(args.n_dim, args.vocab_size, bias=args.bias)
+        self.cfg = cfg
+        self.tok = nn.Embedding(cfg.vocab_size, cfg.n_dim)
+        self.pos = nn.Embedding(cfg.max_seq_len, cfg.n_dim)
+        self.dropout = nn.Dropout(cfg.dropout)
+        self.norm = nn.RMSNorm(cfg.n_dim, eps=cfg.norm_eps)
+        self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_blocks)])
+        self.fc = nn.Linear(cfg.n_dim, cfg.vocab_size, bias=cfg.bias)
 
         self.fc.weight = self.tok.weight # weight tying significantly reduces number of parameters and improves performance
         self.apply(self._init_weights)
