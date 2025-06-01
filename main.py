@@ -1,7 +1,6 @@
-import numpy as np
 import torch
 
-from model import Transformer, ModelArgs
+from model import Transformer
 from tokenizer import Tokenizer
 
 
