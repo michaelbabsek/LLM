@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+import tokenizer
 from config import ModelCfg
 
 
@@ -63,9 +64,10 @@ class Block(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, cfg: ModelCfg):
+    def __init__(self, cfg: ModelCfg, ignore_index: int = -100):
         super().__init__()
         self.cfg = cfg
+        self.ignore_index = ignore_index
         self.tok = nn.Embedding(cfg.vocab_size, cfg.n_dim)
         self.pos = nn.Embedding(cfg.max_seq_len, cfg.n_dim)
         self.dropout = nn.Dropout(cfg.dropout)
@@ -96,6 +98,7 @@ class Transformer(nn.Module):
                 input=logits.view(-1, logits.size(-1)),
                 target=y.view(-1),
                 label_smoothing=0.1,
+                ignore_index=self.ignore_index,
             )
             return loss, logits
 

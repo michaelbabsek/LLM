@@ -34,7 +34,7 @@ scaler         = torch.amp.GradScaler() if device=='cuda' else None
 tokenizer = Tokenizer()
 
 # ─────────────────── model
-model = Transformer(ModelCfg(vocab_size=50304)).to(device)
+model = Transformer(ModelCfg(vocab_size=50304), ignore_index=tokenizer.pad_token_id).to(device)
 if torch.__version__ >= '2' and device=='cuda': model.compile()
 
 # ─────────────────── optimizer + scheduler
@@ -64,7 +64,6 @@ train_ds = BinDataset(chunk_size=cfg.model.max_seq_len, split='train', device=de
 val_ds   = BinDataset(chunk_size=cfg.model.max_seq_len, split='val',   device=device)
 train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, shuffle=False, pin_memory=device=='cuda')
 val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, shuffle=False, pin_memory=device=='cuda')
-
 
 if __name__ == "__main__":
     trainer = Trainer(
