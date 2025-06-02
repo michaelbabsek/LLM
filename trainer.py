@@ -128,6 +128,7 @@ class Trainer:
                         optimizer=self.optimizer,
                         scheduler=self.scheduler,
                         scaler=self.scaler,
+                        path=self.cfg.training.ckpt_path
                     )
 
                     last_loss = val_loss

@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from tokenizer import Tokenizer
 
-num_proc: int = 8
+num_proc: int = 10
 dataset_name: str = "openwebtext"
 tokenizer = Tokenizer()
 

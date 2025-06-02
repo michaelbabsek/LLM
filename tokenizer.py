@@ -2,11 +2,9 @@ import tiktoken
 from typing import List, Sequence
 
 class Tokenizer:
-    def __init__(self, model: str = "cl100k_base"):
+    def __init__(self, model: str = "gpt2"):
         self._base_name = model
         basemodel = tiktoken.get_encoding(model)
-
-        self.pat_str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
 
         extra_special_tokens = [
             "<|begin_of_text|>",
@@ -30,7 +28,7 @@ class Tokenizer:
 
         self.model = tiktoken.Encoding(
             name=f"{model}_custom",
-            pat_str=self.pat_str,
+            pat_str=basemodel._pat_str,
             mergeable_ranks=basemodel._mergeable_ranks,
             special_tokens=self.special_tokens,
         )
