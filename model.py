@@ -64,10 +64,9 @@ class Block(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, cfg: ModelCfg, ignore_index: int = -100):
+    def __init__(self, cfg: ModelCfg):
         super().__init__()
         self.cfg = cfg
-        self.ignore_index = ignore_index
         self.tok = nn.Embedding(cfg.vocab_size, cfg.n_dim)
         self.pos = nn.Embedding(cfg.max_seq_len, cfg.n_dim)
         self.dropout = nn.Dropout(cfg.dropout)
@@ -97,9 +96,10 @@ class Transformer(nn.Module):
             loss = F.cross_entropy(
                 input=logits.view(-1, logits.size(-1)),
                 target=y.view(-1),
-                label_smoothing=0.1,
-                ignore_index=self.ignore_index,
-            )
+                ignore_index=-100,
+                reduction='mean'
+            ).float()
+
             return loss, logits
 
         return logits

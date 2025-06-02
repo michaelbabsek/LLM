@@ -26,6 +26,7 @@ wandb.init( project=cfg.run.project, name=run_name, config=asdict(cfg))
 
 # ─────────────────── device
 device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
+device = 'cpu'
 print("Using device: ", device)
 autocast_ctx   = torch.amp.autocast('cuda', dtype=torch.bfloat16) if device=='cuda' else contextlib.nullcontext()
 scaler         = torch.amp.GradScaler() if device=='cuda' else None
@@ -34,7 +35,7 @@ scaler         = torch.amp.GradScaler() if device=='cuda' else None
 tokenizer = Tokenizer()
 
 # ─────────────────── model
-model = Transformer(ModelCfg(vocab_size=50304), ignore_index=tokenizer.pad_token_id).to(device)
+model = Transformer(ModelCfg(vocab_size=50304)).to(device)
 if torch.__version__ >= '2' and device=='cuda': model.compile()
 
 # ─────────────────── optimizer + scheduler
