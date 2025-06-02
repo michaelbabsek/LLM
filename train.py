@@ -34,7 +34,7 @@ scaler         = torch.amp.GradScaler() if device=='cuda' else None
 tokenizer = Tokenizer()
 
 # ─────────────────── model
-model = Transformer(ModelCfg(vocab_size=100352)).to(device) # actual vocab size is 100287 but 100352 is a very "nice number" which should improve performance on cuda
+model = Transformer(ModelCfg(vocab_size=50304)).to(device)
 if torch.__version__ >= '2' and device=='cuda': model.compile()
 
 # ─────────────────── optimizer + scheduler

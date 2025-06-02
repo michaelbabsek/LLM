@@ -21,7 +21,7 @@ training:
   warmup_iters:     2000
   batch_size:       1
   grad_clip:        1.0
-  grad_accum_steps: 1
+  grad_accum_steps: 32
   use_checkpoint:   true
   ckpt_path:        ./checkpoint.pt
 
