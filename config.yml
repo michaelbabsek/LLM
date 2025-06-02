@@ -19,7 +19,7 @@ training:
   eval_iters:       10
   eval_interval:    250
   warmup_iters:     2000
-  batch_size:       1
+  batch_size:       2
   grad_clip:        1.0
   grad_accum_steps: 8
   use_checkpoint:   true

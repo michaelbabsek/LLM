@@ -77,7 +77,7 @@ class Trainer:
     def _evaluate(self):
         self.model.eval()
         losses = []
-        with torch.no_grad():
+        with torch.no_grad(), self.ctx:
             for _ in range(self.cfg.training.eval_iters):
                 loss = self._forward(*self._move(next(self.val_iter)))
                 losses.append(loss.detach())
