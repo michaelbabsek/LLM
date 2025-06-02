@@ -17,6 +17,7 @@ class Tokenizer:
             "<|start_header_id|>",
             "<|end_header_id|>",
             "<|eot_id|>",
+            "<|pad_id|>"
         ]
 
         self.special_tokens = {
@@ -25,6 +26,7 @@ class Tokenizer:
 
         self.bos_token_id = self.special_tokens["<|begin_of_text|>"]
         self.eos_token_id = self.special_tokens["<|end_of_text|>"]
+        self.pad_token_id = self.special_tokens["<|pad_id|>"]
 
         self.model = tiktoken.Encoding(
             name=f"{model}_custom",

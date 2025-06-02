@@ -58,11 +58,12 @@ class BinDataset(Dataset):
         self.device = device
 
     def __len__(self):
-        return max(0, len(self.data) - self.chunk_size)
+        return max(0, len(self.data) - self.chunk_size) -1
 
     def __getitem__(self, idx):
         x = self.data[idx      : idx + self.chunk_size    ].astype(np.int64, copy=False)
         y = self.data[idx + 1  : idx + self.chunk_size + 1].astype(np.int64, copy=False)
+        y[-1] = tokenizer.pad_token_id # mask last token
         return torch.from_numpy(x), torch.from_numpy(y)
 
 if __name__ == "__main__":
