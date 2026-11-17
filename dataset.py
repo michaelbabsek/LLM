@@ -19,9 +19,9 @@ def _process(example):
         return out
 
 def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/openwebtext/prepare.py
-    dataset = load_dataset(dataset_name, num_proc=num_proc)
+    dataset = load_dataset(dataset_name, split="train[:50%]", num_proc=num_proc)
 
-    split_dataset = dataset["train"].train_test_split(test_size=0.0005, shuffle=True)
+    split_dataset = dataset.train_test_split(test_size=0.0005, shuffle=True)
     split_dataset['val'] = split_dataset.pop('test')  # rename the test split to val
 
     tokenized = split_dataset.map(

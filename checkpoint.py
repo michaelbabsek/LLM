@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 
 import torch
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from torch.optim.lr_scheduler import LambdaLR
 
 
