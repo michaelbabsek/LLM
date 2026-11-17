@@ -6,7 +6,7 @@ import time
 from dataclasses import asdict
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 
 import wandb
 from checkpoint import load_checkpoint
@@ -63,9 +63,14 @@ if cfg.training.use_checkpoint:
 # ─────────────────── data
 train_ds = BinDataset(chunk_size=cfg.model.max_seq_len, split='train', device=device)
 val_ds   = BinDataset(chunk_size=cfg.model.max_seq_len, split='val',   device=device)
-# shuffle is essential: neighbouring windows only differ by one token, so unshuffled batches are nearly identical
-train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, shuffle=True, pin_memory=device=='cuda')
-val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, shuffle=True, pin_memory=device=='cuda')
+# random sampling is essential: neighbouring windows only differ by one token, so unshuffled batches are nearly identical
+# sample with replacement instead of shuffle=True, which would build a permutation of all ~4.5B indices
+train_sampler = RandomSampler(train_ds, replacement=True,
+                              num_samples=cfg.training.train_iters * cfg.training.grad_accum_steps * cfg.training.batch_size)
+val_sampler   = RandomSampler(val_ds, replacement=True,
+                              num_samples=cfg.training.eval_iters * cfg.training.batch_size)
+train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, sampler=train_sampler, pin_memory=device=='cuda')
+val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, sampler=val_sampler,   pin_memory=device=='cuda')
 
 if __name__ == "__main__":
     trainer = Trainer(

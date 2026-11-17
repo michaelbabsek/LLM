@@ -1,5 +1,4 @@
 import contextlib
-import itertools
 from typing import Optional
 
 import torch
@@ -13,6 +12,12 @@ from tqdm import tqdm
 import wandb
 from checkpoint import save_checkpoint
 from config import Config
+
+
+def _loop(dl: DataLoader):
+    # unlike itertools.cycle, this doesn't keep every batch in memory
+    while True:
+        yield from dl
 
 
 class Trainer:
@@ -39,8 +44,8 @@ class Trainer:
         self.device = device
 
         self.model.to(self.device)
-        self.train_iter = itertools.cycle(self.train_dl)
-        self.val_iter = itertools.cycle(self.val_dl)
+        self.train_iter = _loop(self.train_dl)
+        self.val_iter = _loop(self.val_dl)
 
     # ─────────────────── helper functions to clean up code
     def _move(self, batch):
