@@ -14,10 +14,10 @@ class RunCfg:
 
 @dataclass
 class ModelCfg:
-    n_dim: int = 768
-    n_blocks: int = 16
-    n_heads: int = 8
-    max_seq_len: int = 1024
+    n_dim: int = 96
+    n_blocks: int = 4
+    n_heads: int = 4
+    max_seq_len: int = 256
     vocab_size: int = -1  # later defined by tokenizer
     norm_eps: float = 1e-5
     dropout: float = 0.1
@@ -26,13 +26,13 @@ class ModelCfg:
 
 @dataclass
 class TrainCfg:
-    train_iters: int = 128_000
+    train_iters: int = 10_000
     eval_iters: int = 100
-    eval_interval: int = 320
-    warmup_iters: int = 2000
-    batch_size: int = 1
+    eval_interval: int = 1000
+    warmup_iters: int = 1000
+    batch_size: int = 16
     grad_clip: float = 1.0
-    grad_accum_steps: int = 32
+    grad_accum_steps: int = 2
     use_checkpoint: bool = True
     ckpt_path: str = 'ckpt.pt'
 

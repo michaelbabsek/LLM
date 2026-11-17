@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 import wandb
 from checkpoint import load_checkpoint
-from config import load_cfg, ModelCfg
+from config import load_cfg
 from dataset import BinDataset
 from model import Transformer
 from tokenizer import Tokenizer
@@ -26,7 +26,6 @@ wandb.init( project=cfg.run.project, name=run_name, config=asdict(cfg))
 
 # ─────────────────── device
 device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
-device = 'cpu'
 print("Using device: ", device)
 autocast_ctx   = torch.amp.autocast('cuda', dtype=torch.bfloat16) if device=='cuda' else contextlib.nullcontext()
 scaler         = torch.amp.GradScaler() if device=='cuda' else None
@@ -35,7 +34,8 @@ scaler         = torch.amp.GradScaler() if device=='cuda' else None
 tokenizer = Tokenizer()
 
 # ─────────────────── model
-model = Transformer(ModelCfg(vocab_size=50304)).to(device)
+cfg.model.vocab_size = 50304  # gpt2 + special tokens (50267), padded to a multiple of 64 for efficiency
+model = Transformer(cfg.model).to(device)
 if torch.__version__ >= '2' and device=='cuda': model.compile()
 
 # ─────────────────── optimizer + scheduler
@@ -63,8 +63,9 @@ if cfg.training.use_checkpoint:
 # ─────────────────── data
 train_ds = BinDataset(chunk_size=cfg.model.max_seq_len, split='train', device=device)
 val_ds   = BinDataset(chunk_size=cfg.model.max_seq_len, split='val',   device=device)
-train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, shuffle=False, pin_memory=device=='cuda')
-val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, shuffle=False, pin_memory=device=='cuda')
+# shuffle is essential: neighbouring windows only differ by one token, so unshuffled batches are nearly identical
+train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, shuffle=True, pin_memory=device=='cuda')
+val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, shuffle=True, pin_memory=device=='cuda')
 
 if __name__ == "__main__":
     trainer = Trainer(
@@ -79,5 +80,8 @@ if __name__ == "__main__":
         val_dl=val_dl,
 
     )
+
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"total params: {total_params}")
 
     trainer.train(start_step=start_step, last_loss=last_loss)

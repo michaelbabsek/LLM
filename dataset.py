@@ -36,8 +36,8 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
         out_dir = "./dataset"
         os.makedirs(out_dir, exist_ok=True)
         filename = os.path.join(out_dir, f"{split}.bin")
-        arr = np.memmap(filename, dtype=np.uint32, mode='w+',
-                        shape=(arr_len,))  # int16 won't work since 2^16 < 100277 (vocab size)
+        arr = np.memmap(filename, dtype=np.uint16, mode='w+',
+                        shape=(arr_len,))
         total_shards = 1024
 
         idx = 0
@@ -53,7 +53,7 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
 class BinDataset(Dataset):
     def __init__(self, chunk_size: int, split: str, device = "cpu"):
         super().__init__()
-        self.data = np.memmap(filename=f"./dataset/{split}.bin", dtype=np.uint32, mode="r")
+        self.data = np.memmap(filename=f"./dataset/{split}.bin", dtype=np.uint16, mode="r")
         self.chunk_size = chunk_size
         self.device = device
 
@@ -63,7 +63,6 @@ class BinDataset(Dataset):
     def __getitem__(self, idx):
         x = np.asarray(self.data[idx: idx + self.chunk_size], dtype=np.int64)
         y = np.asarray(self.data[idx + 1: idx + self.chunk_size + 1], dtype=np.int64)
-        y[-1] = -100
         return torch.as_tensor(x), torch.as_tensor(y)
 
 if __name__ == "__main__":

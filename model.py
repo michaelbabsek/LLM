@@ -4,7 +4,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import tokenizer
 from config import ModelCfg
 
 
@@ -26,7 +25,7 @@ class MultiheadAttention(nn.Module):
 
         q, k, v = qkv.unbind(dim=2)
 
-        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.cfg.dropout) # using flash attention
+        context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.cfg.dropout if self.training else 0.0) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
         context = self.dropout(context)
 
@@ -90,9 +89,7 @@ class Transformer(nn.Module):
         logits = self.fc(h)  # (B, S, V)
 
         if y is not None:
-            logits = logits[:, :-1, :].contiguous()
-            y = y[:, 1:].contiguous()
-
+            # y is already shifted by one in the dataset, so logits[:, t] predicts y[:, t]
             loss = F.cross_entropy(
                 input=logits.view(-1, logits.size(-1)),
                 target=y.view(-1),
