@@ -1,0 +1,49 @@
+# Full model (~143M parameters with weight tying) for a ~20 hour run on a single 24 GB CUDA GPU.
+#   python train.py --config config.gpu.yml
+#
+# Calibrate after the first ~200 steps (see perf/tokens_per_sec and perf/memory_gb in wandb or the log):
+#   tokens_per_step = batch_size * grad_accum_steps * max_seq_len  (= 16 * 2 * 1024 = 32,768)
+#   train_iters     = tokens_per_sec * run_seconds / tokens_per_step
+#                     e.g. 40,000 tok/s * 72,000 s / 32,768 = ~88,000  (the value below assumes ~40k tok/s)
+#   warmup_iters    = ~2-3% of train_iters
+# Then delete ./checkpoints/gpu and restart: train_iters changes the lr schedule, so don't resume a run with a
+# different value.
+run:
+  project: LLM
+  name:    gpu-143m
+  seed:    42
+  log_interval: 10
+
+model:
+  n_dim:       768
+  n_blocks:    16
+  n_heads:     8
+  max_seq_len: 1024
+  vocab_size:  -1  # set from the tokenizer in train.py
+  norm_eps:    1.0e-5
+  dropout:     0.0
+  bias: False
+
+training:
+  train_iters:      88000  # ADJUST after measuring tokens_per_sec (see above)
+  warmup_iters:     2000   # ADJUST to ~2-3% of train_iters
+  eval_iters:       200
+  eval_batch_size:  16
+  eval_interval:    1000   # one evaluation is ~3.3M tokens forward only, roughly 1-2% of the training time
+  # batch_size * grad_accum_steps = 32 sequences per optimizer step. ADJUST: if perf/memory_gb stays well below
+  # ~20 GB, try batch_size 32 / grad_accum_steps 1 (usually faster); on out-of-memory use 8 / 4.
+  # Keep the product constant so the lr schedule and train_iters stay valid.
+  batch_size:       16
+  grad_accum_steps: 2
+  grad_clip:        1.0
+  use_checkpoint:   true
+  ckpt_dir:         ./checkpoints/gpu
+  ckpt_interval:    1000   # last.pt is ~1.7 GB, at ~15 min per 1000 steps a crash loses at most that much
+
+optim:
+  max_lr:       6.0e-4
+  min_lr:       6.0e-5
+  weight_decay: 1.0e-1
+  beta1:        0.9
+  beta2:        0.95
+  eps:          1.0e-8

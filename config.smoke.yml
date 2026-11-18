@@ -1,0 +1,38 @@
+# Small model for a quick end-to-end test on a MacBook (MPS), runs well under 30 minutes.
+#   python train.py --config config.smoke.yml
+run:
+  project: LLM
+  name:    smoke
+  seed:    42
+  log_interval: 10
+
+model:
+  n_dim:       384
+  n_blocks:    6
+  n_heads:     6
+  max_seq_len: 256
+  vocab_size:  -1  # set from the tokenizer in train.py
+  norm_eps:    1.0e-5
+  dropout:     0.0
+  bias: False
+
+training:
+  train_iters:      300
+  eval_iters:       50
+  eval_batch_size:  32
+  eval_interval:    50
+  warmup_iters:     30
+  batch_size:       32
+  grad_clip:        1.0
+  grad_accum_steps: 1
+  use_checkpoint:   true
+  ckpt_dir:         ./checkpoints/smoke
+  ckpt_interval:    100
+
+optim:
+  max_lr:       1.0e-3
+  min_lr:       1.0e-4
+  weight_decay: 1.0e-1
+  beta1:        0.9
+  beta2:        0.95
+  eps:          1.0e-8
