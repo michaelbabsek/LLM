@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from tokenizer import Tokenizer
 
-num_proc: int = 10
+num_proc: int = 32
 dataset_name: str = "Skylion007/openwebtext"
 tokenizer = Tokenizer()
 
