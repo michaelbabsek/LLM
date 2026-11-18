@@ -9,7 +9,7 @@ from tqdm import tqdm
 from tokenizer import Tokenizer
 
 num_proc: int = 10
-dataset_name: str = "openwebtext"
+dataset_name: str = "Skylion007/openwebtext"
 tokenizer = Tokenizer()
 
 def _process(example):
