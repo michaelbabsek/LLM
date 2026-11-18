@@ -36,6 +36,10 @@ class Tokenizer:
     def __len__(self) -> int:
         return self.model.n_vocab
 
+    def padded_vocab_size(self, multiple: int = 64) -> int:
+        # embedding size rounded up to a multiple of 64 for efficiency (50267 -> 50304 for gpt2)
+        return -(-len(self) // multiple) * multiple
+
     def encode(self, s: str, *, add_bos: bool = False, add_eos: bool = False) -> List[int]:
         tokens: List[int] = []
         if add_bos:

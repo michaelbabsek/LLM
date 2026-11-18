@@ -33,7 +33,7 @@ scaler         = torch.amp.GradScaler() if device=='cuda' else None
 tokenizer = Tokenizer()
 
 # ─────────────────── model
-cfg.model.vocab_size = 50304  # gpt2 + special tokens (50267), padded to a multiple of 64 for efficiency
+cfg.model.vocab_size = tokenizer.padded_vocab_size()  # gpt2 + special tokens (50267), padded to 50304
 model = Transformer(cfg.model).to(device)
 if torch.__version__ >= '2' and device=='cuda': model.compile()
 
