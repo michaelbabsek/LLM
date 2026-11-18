@@ -25,8 +25,8 @@ model:
   bias: False
 
 training:
-  train_iters:      138000  # ADJUST after measuring tokens_per_sec (see above)
-  warmup_iters:     3000   # ADJUST to ~2-3% of train_iters
+  train_iters:      69000  # ADJUST after measuring tokens_per_sec (see above)
+  warmup_iters:     2000   # ADJUST to ~2-3% of train_iters
   eval_iters:       200
   eval_batch_size:  16
   eval_interval:    1000   # one evaluation is ~3.3M tokens forward only, roughly 1-2% of the training time
@@ -34,15 +34,15 @@ training:
   # ~20 GB, try batch_size 32 / grad_accum_steps 1 (usually faster); on out-of-memory use 8 / 4.
   # Keep the product constant so the lr schedule and train_iters stay valid.
   batch_size:       16
-  grad_accum_steps: 2
+  grad_accum_steps: 4
   grad_clip:        1.0
   use_checkpoint:   true
   ckpt_dir:         ./checkpoints/gpu
   ckpt_interval:    1000   # last.pt is ~1.7 GB, at ~15 min per 1000 steps a crash loses at most that much
 
 optim:
-  max_lr:       6.0e-4
-  min_lr:       6.0e-5
+  max_lr:       3.0e-4
+  min_lr:       3.0e-5
   weight_decay: 1.0e-1
   beta1:        0.9
   beta2:        0.95
