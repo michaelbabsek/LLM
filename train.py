@@ -77,7 +77,9 @@ if __name__ == "__main__":
 
     )
 
-    total_params = sum(p.numel() for p in model.parameters())
+    total_params = sum(p.numel() for p in model.parameters())  # tied weights are counted once
     print(f"total params: {total_params}")
+    wandb.config.update({"n_params": total_params})
+    wandb.run.summary["n_params"] = total_params
 
     trainer.train(start_step=start_step, last_loss=last_loss)

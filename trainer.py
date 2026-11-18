@@ -1,4 +1,5 @@
 import contextlib
+import time
 from typing import Optional
 
 import torch
@@ -40,6 +41,7 @@ class Trainer:
         self.model.to(self.device)
         # continuous generator for training batches, seeded from the config
         self.train_gen = torch.Generator().manual_seed(cfg.run.seed)
+        self.tokens_per_step = cfg.training.batch_size * cfg.training.grad_accum_steps * cfg.model.max_seq_len
 
     # ─────────────────── helper functions to clean up code
     def _train_batch(self):
@@ -88,6 +90,7 @@ class Trainer:
     def train(self, start_step: int = 0, last_loss: float = float("inf")):
         torch.set_float32_matmul_precision("high")
         pbar = tqdm(range(start_step, self.cfg.training.train_iters), desc="Training")
+        t_last, steps_since_log = time.perf_counter(), 0
 
         for step_idx in pbar:
             step_loss = 0.0
@@ -96,14 +99,21 @@ class Trainer:
                 self._backward(loss)
                 step_loss += loss.item()
 
+            lr = self.optimizer.param_groups[0]["lr"]  # lr used for this step, read before the scheduler advances
             grad_norm = self._opt_step()
+            steps_since_log += 1
 
             if step_idx % self.cfg.run.log_interval == 0:
+                t_now = time.perf_counter()  # loss.item() above already synchronized with the device
+                tokens_per_sec = steps_since_log * self.tokens_per_step / (t_now - t_last)
+                t_last, steps_since_log = t_now, 0
                 wandb.log(
                     {
                         "train/loss": step_loss,
-                        "train/lr": self.optimizer.param_groups[0]["lr"],
+                        "train/lr": lr,
                         "train/grad_norm": grad_norm,
+                        "train/tokens_seen": (step_idx + 1) * self.tokens_per_step,
+                        "perf/tokens_per_sec": tokens_per_sec,
                     },
                     step=step_idx,
                 )
@@ -112,6 +122,7 @@ class Trainer:
 
             if step_idx % self.cfg.training.eval_interval == 0: # evaluate the model (also does it at the beginning to not have missing data in visualization)
                 val_loss = self._evaluate()
+                t_last, steps_since_log = time.perf_counter(), 0  # keep evaluation time out of the throughput
                 wandb.log(
                     {
                         "val/loss": val_loss,
