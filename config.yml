@@ -24,7 +24,8 @@ training:
   grad_clip:        1.0
   grad_accum_steps: 8
   use_checkpoint:   true
-  ckpt_path:        ./checkpoint.pt
+  ckpt_dir:         ./checkpoints/local
+  ckpt_interval:    500
 
 optim:
   max_lr:       6.0e-4

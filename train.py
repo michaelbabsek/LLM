@@ -1,4 +1,5 @@
 
+import argparse
 import contextlib
 import math
 import random
@@ -8,20 +9,22 @@ from dataclasses import asdict
 import torch
 
 import wandb
-from checkpoint import load_checkpoint
+from checkpoint import load_checkpoint, latest_checkpoint
 from config import load_cfg
 from dataset import BinDataset
 from model import Transformer
 from tokenizer import Tokenizer
 from trainer import Trainer
 
-cfg = load_cfg()
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', default='config.yml', help='yaml config, e.g. config.smoke.yml or config.gpu.yml')
+args = parser.parse_args()
+cfg = load_cfg(args.config)
+print(f"Using config: {args.config}")
 
-# ─────────────────── seeds + wandb
+# ─────────────────── seeds
 torch.manual_seed(cfg.run.seed); random.seed(cfg.run.seed)
 run_name = cfg.run.name or time.strftime('%Y%m%d_%H%M%S')
-
-wandb.init( project=cfg.run.project, name=run_name, config=asdict(cfg))
 
 # ─────────────────── device
 device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
@@ -53,11 +56,18 @@ scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 # ─────────────────── resume?
 start_step = 0
-last_loss = float('inf')
-if cfg.training.use_checkpoint:
-    ckpt = load_checkpoint(model, optimizer, scheduler, scaler, cfg.training.ckpt_path, device)
-    start_step = ckpt['step']
-    last_loss = ckpt['loss']
+best_val_loss = float('inf')
+wandb_run_id = None
+train_gen = torch.Generator().manual_seed(cfg.run.seed)
+ckpt_path = latest_checkpoint(cfg.training.ckpt_dir) if cfg.training.use_checkpoint else None
+if ckpt_path is not None:
+    ckpt = load_checkpoint(ckpt_path, model, optimizer, scheduler, scaler, train_gen)
+    start_step, best_val_loss, wandb_run_id = ckpt['step'], ckpt['best_val_loss'], ckpt['wandb_run_id']
+    print(f"resuming from {ckpt_path} at step {start_step} (best val loss {best_val_loss:.4f})")
+
+# ─────────────────── wandb (continues the run stored in the checkpoint)
+wandb.init(project=cfg.run.project, name=run_name, config=asdict(cfg), id=wandb_run_id,
+           resume='allow' if wandb_run_id else None)
 
 # ─────────────────── data
 train_data = BinDataset('train', cfg.model.max_seq_len, cfg.training.data_dir, device)
@@ -74,7 +84,7 @@ if __name__ == "__main__":
         device=device,
         train_data=train_data,
         val_data=val_data,
-
+        train_gen=train_gen,
     )
 
     total_params = sum(p.numel() for p in model.parameters())  # tied weights are counted once
@@ -82,4 +92,4 @@ if __name__ == "__main__":
     wandb.config.update({"n_params": total_params})
     wandb.run.summary["n_params"] = total_params
 
-    trainer.train(start_step=start_step, last_loss=last_loss)
+    trainer.train(start_step=start_step, best_val_loss=best_val_loss)

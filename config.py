@@ -36,7 +36,8 @@ class TrainCfg:
     grad_clip: float = 1.0
     grad_accum_steps: int = 2
     use_checkpoint: bool = True
-    ckpt_path: str = 'ckpt.pt'
+    ckpt_dir: str = './checkpoints'  # holds best.pt (lowest val loss) and last.pt (for resuming)
+    ckpt_interval: int = 1000  # steps between saves of last.pt
     data_dir: str = './dataset'
 
 
