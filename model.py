@@ -1,3 +1,4 @@
+import math
 from typing import List, Optional, Dict
 
 import torch
@@ -12,6 +13,7 @@ class MultiheadAttention(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.qkv = nn.Linear(cfg.n_dim, cfg.n_dim * 3, bias=cfg.bias)
+        self.proj = nn.Linear(cfg.n_dim, cfg.n_dim, bias=cfg.bias)  # output projection, mixes the heads
         self.dropout = nn.Dropout(cfg.dropout)
 
     def forward(self, x):
@@ -27,7 +29,7 @@ class MultiheadAttention(nn.Module):
 
         context = F.scaled_dot_product_attention(query=q, key=k, value=v, attn_mask=None, is_causal=True, dropout_p=self.cfg.dropout if self.training else 0.0) # using flash attention
         context = context.transpose(1, 2).contiguous().view(B, S, D)
-        context = self.dropout(context)
+        context = self.dropout(self.proj(context))
 
         return context
 
@@ -75,6 +77,11 @@ class Transformer(nn.Module):
 
         self.fc.weight = self.tok.weight # weight tying significantly reduces number of parameters and improves performance
         self.apply(self._init_weights)
+        # GPT-2: scale down the projections that write into the residual stream, each block adds two of them,
+        # so the variance of the residual stream doesn't grow with depth
+        for name, param in self.named_parameters():
+            if name.endswith(("attn.proj.weight", "mlp.fc2.weight")):
+                nn.init.normal_(param, mean=0.0, std=0.02 / math.sqrt(2 * cfg.n_blocks))
 
     def forward(self, x: torch.Tensor, y: Optional[torch.Tensor] = None):
         B, S = x.shape
