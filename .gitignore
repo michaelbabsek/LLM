@@ -1,0 +1,8 @@
+.venv/
+checkpoints/
+dataset/
+wandb/
+__pycache__/
+.idea/
+.DS_Store
+*.pt
