@@ -38,6 +38,7 @@ class TrainCfg:
     use_checkpoint: bool = True
     ckpt_dir: str = './checkpoints'  # holds best.pt (lowest val loss) and last.pt (for resuming)
     ckpt_interval: int = 1000  # steps between saves of last.pt
+    keep_interval: int = 5000  # steps between numbered checkpoints (step_005000.pt, ...) that are never overwritten
     data_dir: str = './dataset'
 
 

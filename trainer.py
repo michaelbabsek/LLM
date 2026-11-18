@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 
 import wandb
-from checkpoint import save_checkpoint, best_path, last_path
+from checkpoint import save_checkpoint, best_path, last_path, step_path
 from config import Config
 from dataset import BinDataset
 
@@ -182,6 +182,11 @@ class Trainer:
                 if completed % self.cfg.training.ckpt_interval == 0 or completed == train_iters:
                     self._save(last_path(ckpt_dir), completed, best_val_loss)
                     pbar.write(f"saved {last_path(ckpt_dir)} at step {completed}")
+                    t_last, steps_since_log = time.perf_counter(), 0
+
+                if completed % self.cfg.training.keep_interval == 0:  # kept, to go back to after a divergence
+                    self._save(step_path(ckpt_dir, completed), completed, best_val_loss)
+                    pbar.write(f"saved {step_path(ckpt_dir, completed)}")
                     t_last, steps_since_log = time.perf_counter(), 0
 
         except KeyboardInterrupt:

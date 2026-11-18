@@ -18,6 +18,13 @@ from trainer import Trainer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', default='config.yml', help='yaml config, e.g. config.smoke.yml or config.gpu.yml')
+parser.add_argument('--resume', default=None,
+                    help='checkpoint to resume from, e.g. ./checkpoints/gpu/step_005000.pt; starts a new wandb run. '
+                         'Default: the newer of last.pt and best.pt in ckpt_dir')
+parser.add_argument('--lr-scale', type=float, default=None,
+                    help='multiplies the lr schedule (max_lr to min_lr) for the rest of the run, e.g. 0.5, without '
+                         'resetting the step. Relative to the config, stored in the checkpoint, so it doesn\'t '
+                         'compound over restarts')
 args = parser.parse_args()
 cfg = load_cfg(args.config)
 print(f"Using config: {args.config}")
@@ -61,11 +68,20 @@ start_step = 0
 best_val_loss = float('inf')
 wandb_run_id = None
 train_gen = torch.Generator().manual_seed(cfg.run.seed)
-ckpt_path = latest_checkpoint(cfg.training.ckpt_dir) if cfg.training.use_checkpoint else None
+ckpt_path = args.resume or (latest_checkpoint(cfg.training.ckpt_dir) if cfg.training.use_checkpoint else None)
 if ckpt_path is not None:
     ckpt = load_checkpoint(ckpt_path, model, optimizer, scheduler, scaler, train_gen)
     start_step, best_val_loss, wandb_run_id = ckpt['step'], ckpt['best_val_loss'], ckpt['wandb_run_id']
     print(f"resuming from {ckpt_path} at step {start_step} (best val loss {best_val_loss:.4f})")
+    if args.resume:  # going back in steps, wandb ignores steps lower than the ones already logged in a run
+        wandb_run_id, run_name = None, f"{run_name}-from-{start_step}"
+
+# the scale lives in scheduler.base_lrs, which is part of the checkpoint
+if args.lr_scale is not None:
+    scheduler.base_lrs = [cfg.optim.max_lr * args.lr_scale for _ in scheduler.base_lrs]
+    for group, base_lr in zip(optimizer.param_groups, scheduler.base_lrs):
+        group['lr'] = base_lr * lr_lambda(scheduler.last_epoch)  # lr of the next step
+print(f"lr scale {scheduler.base_lrs[0] / cfg.optim.max_lr:g} (next lr {optimizer.param_groups[0]['lr']:.3e})")
 
 # ─────────────────── wandb (continues the run stored in the checkpoint)
 wandb.init(project=cfg.run.project, name=run_name, config=asdict(cfg), id=wandb_run_id,
