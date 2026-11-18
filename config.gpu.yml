@@ -25,8 +25,8 @@ model:
   bias: False
 
 training:
-  train_iters:      88000  # ADJUST after measuring tokens_per_sec (see above)
-  warmup_iters:     2000   # ADJUST to ~2-3% of train_iters
+  train_iters:      138000  # ADJUST after measuring tokens_per_sec (see above)
+  warmup_iters:     3000   # ADJUST to ~2-3% of train_iters
   eval_iters:       200
   eval_batch_size:  16
   eval_interval:    1000   # one evaluation is ~3.3M tokens forward only, roughly 1-2% of the training time
