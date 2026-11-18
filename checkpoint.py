@@ -28,6 +28,23 @@ def last_path(ckpt_dir: str) -> str:
     return os.path.join(ckpt_dir, "last.pt")
 
 
+def step_path(ckpt_dir: str, step: int) -> str:
+    return os.path.join(ckpt_dir, f"step_{step:06d}.pt")
+
+
+def check_compatible(path: str, state_dict: Dict[str, Any], model: torch.nn.Module) -> None:
+    """Exits with a clear message if the checkpoint was saved by a different model architecture."""
+    expected = model.state_dict().keys()
+    missing, unexpected = sorted(expected - state_dict.keys()), sorted(state_dict.keys() - expected)
+    if missing or unexpected:
+        raise SystemExit(
+            f"{path} does not match the current model architecture "
+            f"(missing: {missing[:3]}{' ...' if len(missing) > 3 else ''}, "
+            f"unexpected: {unexpected[:3]}{' ...' if len(unexpected) > 3 else ''}). "
+            f"It was probably saved before the attention output projection was added; "
+            f"such checkpoints can't be loaded, train a new model.")
+
+
 def save_checkpoint(
         path: str,
         step: int,
@@ -79,6 +96,7 @@ def load_checkpoint(
     # load to cpu, load_state_dict copies into the parameters on their device (the rng state must stay on cpu)
     ckpt = torch.load(path, map_location="cpu")
 
+    check_compatible(path, ckpt["model"], model)
     model.load_state_dict(ckpt["model"])
     optimizer.load_state_dict(ckpt["optimizer"])
     scheduler.load_state_dict(ckpt["scheduler"])

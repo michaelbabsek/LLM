@@ -7,6 +7,7 @@ import time
 
 import torch
 
+from checkpoint import check_compatible
 from config import ModelCfg, load_cfg
 from model import Transformer
 from tokenizer import Tokenizer
@@ -28,6 +29,7 @@ def load_model(ckpt_path: str, config_path: str, device: str):
         model_cfg = load_cfg(config_path).model
         model_cfg.vocab_size = Tokenizer().padded_vocab_size()
     model = Transformer(model_cfg)
+    check_compatible(ckpt_path, ckpt["model"], model)
     model.load_state_dict(ckpt["model"])
     return model.to(device), ckpt
 
