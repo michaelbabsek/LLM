@@ -51,8 +51,8 @@ class Trainer:
 
     def _forward(self, x, y):
         with self.ctx:
-            loss, _ = self.model(x, y)
-        return loss
+            loss, logits = self.model(x, y)
+        return loss, logits
 
     def _backward(self, loss):
         loss = loss
@@ -84,7 +84,7 @@ class Trainer:
         with torch.no_grad():  # autocast is entered in _forward only, entering the same ctx twice leaks its state
             for _ in range(self.cfg.training.eval_iters):
                 x, y = self.val_data.get_batch(self.cfg.training.eval_batch_size, val_gen)
-                losses.append(self._forward(x, y).detach())
+                losses.append(self._forward(x, y)[0].detach())
         self.model.train()
         return torch.mean(torch.stack(losses)).item()
 
@@ -121,26 +121,35 @@ class Trainer:
         try:
             for step_idx in pbar:
                 step_loss = 0.0
+                is_log_step = step_idx % self.cfg.run.log_interval == 0
                 for micro_step in range(self.cfg.training.grad_accum_steps):
-                    loss = self._forward(*self._train_batch()) / self.cfg.training.grad_accum_steps
+                    loss, logits = self._forward(*self._train_batch())
+                    if is_log_step and micro_step == self.cfg.training.grad_accum_steps - 1:
+                        max_logit = logits.detach().abs().max()  # of the last batch, tensor op, no sync here
+                    del logits  # don't keep the (B, S, V) tensor alive longer than the backward needs it
+                    loss = loss / self.cfg.training.grad_accum_steps
                     self._backward(loss)
                     step_loss += loss.item()
 
                 lr = self.optimizer.param_groups[0]["lr"]  # lr used for this step, read before the scheduler advances
-                grad_norm = self._opt_step()
+                grad_norm = self._opt_step()  # norm before clipping
                 steps_since_log += 1
                 completed = step_idx + 1
 
-                if step_idx % self.cfg.run.log_interval == 0:
+                if is_log_step:
                     t_now = time.perf_counter()  # loss.item() above already synchronized with the device
                     tokens_per_sec = steps_since_log * self.tokens_per_step / (t_now - t_last)
                     t_last, steps_since_log = t_now, 0
                     mem_gb = self._memory_gb()
+                    grad_norm, max_logit = grad_norm.item(), max_logit.item()
+                    emb_norm = self.model.tok.weight.detach().norm().item()  # tied with the output layer
                     wandb.log(
                         {
                             "train/loss": step_loss,
                             "train/lr": lr,
                             "train/grad_norm": grad_norm,
+                            "diag/emb_norm": emb_norm,
+                            "diag/max_abs_logit": max_logit,
                             "train/tokens_seen": completed * self.tokens_per_step,
                             "perf/tokens_per_sec": tokens_per_sec,
                             "perf/memory_gb": mem_gb,
@@ -148,6 +157,7 @@ class Trainer:
                         step=step_idx,
                     )
                     pbar.write(f"step {step_idx:6d} | loss {step_loss:.4f} | lr {lr:.3e} | "
+                               f"grad norm {grad_norm:.3f} | emb norm {emb_norm:.2f} | max logit {max_logit:.2f} | "
                                f"{tokens_per_sec:,.0f} tok/s | mem {mem_gb:.2f} GB")
 
                 pbar.set_postfix(loss=f"{step_loss:.4f}")
