@@ -4,7 +4,6 @@ from typing import Optional
 import numpy as np
 import torch
 from datasets import load_dataset
-from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from tokenizer import Tokenizer
@@ -50,20 +49,24 @@ def _prepare():  # source: https://github.com/karpathy/nanoGPT/blob/master/data/
             idx += len(arr_shard)
         arr.flush()
 
-class BinDataset(Dataset):
-    def __init__(self, chunk_size: int, split: str, device = "cpu"):
-        super().__init__()
-        self.data = np.memmap(filename=f"./dataset/{split}.bin", dtype=np.uint16, mode="r")
-        self.chunk_size = chunk_size
+class BinDataset:
+    """Draws random windows directly from the memory-mapped token file (no index permutation, no caching)."""
+
+    def __init__(self, split: str, seq_len: int, data_dir: str = "./dataset", device: str = "cpu"):
+        self.path = os.path.join(data_dir, f"{split}.bin")
+        self.seq_len = seq_len
         self.device = device
+        self.n_tokens = len(np.memmap(self.path, dtype=np.uint16, mode="r"))
 
-    def __len__(self):
-        return max(0, len(self.data) - self.chunk_size)
-
-    def __getitem__(self, idx):
-        x = np.asarray(self.data[idx: idx + self.chunk_size], dtype=np.int64)
-        y = np.asarray(self.data[idx + 1: idx + self.chunk_size + 1], dtype=np.int64)
-        return torch.as_tensor(x), torch.as_tensor(y)
+    def get_batch(self, batch_size: int, generator: torch.Generator):
+        # recreate the memmap every batch to avoid a memory leak, see nanoGPT train.py
+        data = np.memmap(self.path, dtype=np.uint16, mode="r")
+        ix = torch.randint(self.n_tokens - self.seq_len, (batch_size,), generator=generator).tolist()
+        x = torch.from_numpy(np.stack([data[i: i + self.seq_len] for i in ix]).astype(np.int64))
+        y = torch.from_numpy(np.stack([data[i + 1: i + 1 + self.seq_len] for i in ix]).astype(np.int64))  # shifted by one token
+        if self.device == "cuda":
+            return x.pin_memory().to(self.device, non_blocking=True), y.pin_memory().to(self.device, non_blocking=True)
+        return x.to(self.device), y.to(self.device)
 
 if __name__ == "__main__":
     _prepare()

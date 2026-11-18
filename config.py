@@ -27,7 +27,9 @@ class ModelCfg:
 @dataclass
 class TrainCfg:
     train_iters: int = 10_000
-    eval_iters: int = 100
+    eval_iters: int = 200
+    eval_batch_size: int = 16
+    eval_seed: int = 1337  # fixed, so every evaluation sees the same validation windows
     eval_interval: int = 1000
     warmup_iters: int = 1000
     batch_size: int = 16
@@ -35,6 +37,7 @@ class TrainCfg:
     grad_accum_steps: int = 2
     use_checkpoint: bool = True
     ckpt_path: str = 'ckpt.pt'
+    data_dir: str = './dataset'
 
 
 @dataclass

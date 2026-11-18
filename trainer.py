@@ -6,18 +6,12 @@ from torch.amp import GradScaler, autocast
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import wandb
 from checkpoint import save_checkpoint
 from config import Config
-
-
-def _loop(dl: DataLoader):
-    # unlike itertools.cycle, this doesn't keep every batch in memory
-    while True:
-        yield from dl
+from dataset import BinDataset
 
 
 class Trainer:
@@ -27,8 +21,8 @@ class Trainer:
             model: torch.nn.Module,
             optimizer: Optimizer,
             scheduler: LambdaLR,
-            train_dl: DataLoader,
-            val_dl: DataLoader,
+            train_data: BinDataset,
+            val_data: BinDataset,
             scaler: Optional[GradScaler] = None,
             ctx: Optional[autocast] = contextlib.nullcontext(),
             device: Optional[str] = "cpu",
@@ -39,18 +33,17 @@ class Trainer:
         self.scheduler = scheduler
         self.scaler = scaler
         self.ctx = ctx
-        self.train_dl = train_dl
-        self.val_dl = val_dl
+        self.train_data = train_data
+        self.val_data = val_data
         self.device = device
 
         self.model.to(self.device)
-        self.train_iter = _loop(self.train_dl)
-        self.val_iter = _loop(self.val_dl)
+        # continuous generator for training batches, seeded from the config
+        self.train_gen = torch.Generator().manual_seed(cfg.run.seed)
 
     # ─────────────────── helper functions to clean up code
-    def _move(self, batch):
-        x, y = batch
-        return x.to(self.device), y.to(self.device)
+    def _train_batch(self):
+        return self.train_data.get_batch(self.cfg.training.batch_size, self.train_gen)
 
     def _forward(self, x, y):
         with self.ctx:
@@ -80,12 +73,14 @@ class Trainer:
         return grad_norm
 
     def _evaluate(self):
+        # fresh generator with a fixed seed: every evaluation uses the same validation windows
+        val_gen = torch.Generator().manual_seed(self.cfg.training.eval_seed)
         self.model.eval()
         losses = []
-        with torch.no_grad(), self.ctx:
+        with torch.no_grad():  # autocast is entered in _forward only, entering the same ctx twice leaks its state
             for _ in range(self.cfg.training.eval_iters):
-                loss = self._forward(*self._move(next(self.val_iter)))
-                losses.append(loss.detach())
+                x, y = self.val_data.get_batch(self.cfg.training.eval_batch_size, val_gen)
+                losses.append(self._forward(x, y).detach())
         self.model.train()
         return torch.mean(torch.stack(losses)).item()
 
@@ -97,7 +92,7 @@ class Trainer:
         for step_idx in pbar:
             step_loss = 0.0
             for micro_step in range(self.cfg.training.grad_accum_steps):
-                loss = self._forward(*self._move(next(self.train_iter))) / self.cfg.training.grad_accum_steps
+                loss = self._forward(*self._train_batch()) / self.cfg.training.grad_accum_steps
                 self._backward(loss)
                 step_loss += loss.item()
 

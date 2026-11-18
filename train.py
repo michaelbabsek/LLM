@@ -6,7 +6,6 @@ import time
 from dataclasses import asdict
 
 import torch
-from torch.utils.data import DataLoader, RandomSampler
 
 import wandb
 from checkpoint import load_checkpoint
@@ -61,16 +60,8 @@ if cfg.training.use_checkpoint:
     last_loss = ckpt['loss']
 
 # ─────────────────── data
-train_ds = BinDataset(chunk_size=cfg.model.max_seq_len, split='train', device=device)
-val_ds   = BinDataset(chunk_size=cfg.model.max_seq_len, split='val',   device=device)
-# random sampling is essential: neighbouring windows only differ by one token, so unshuffled batches are nearly identical
-# sample with replacement instead of shuffle=True, which would build a permutation of all ~4.5B indices
-train_sampler = RandomSampler(train_ds, replacement=True,
-                              num_samples=cfg.training.train_iters * cfg.training.grad_accum_steps * cfg.training.batch_size)
-val_sampler   = RandomSampler(val_ds, replacement=True,
-                              num_samples=cfg.training.eval_iters * cfg.training.batch_size)
-train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, sampler=train_sampler, pin_memory=device=='cuda')
-val_dl   = DataLoader(val_ds,  batch_size=cfg.training.batch_size, sampler=val_sampler,   pin_memory=device=='cuda')
+train_data = BinDataset('train', cfg.model.max_seq_len, cfg.training.data_dir, device)
+val_data   = BinDataset('val',   cfg.model.max_seq_len, cfg.training.data_dir, device)
 
 if __name__ == "__main__":
     trainer = Trainer(
@@ -81,8 +72,8 @@ if __name__ == "__main__":
         scaler=scaler,
         ctx=autocast_ctx,
         device=device,
-        train_dl=train_dl,
-        val_dl=val_dl,
+        train_data=train_data,
+        val_data=val_data,
 
     )
 
