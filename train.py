@@ -29,8 +29,10 @@ run_name = cfg.run.name or time.strftime('%Y%m%d_%H%M%S')
 # ─────────────────── device
 device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
 print("Using device: ", device)
-autocast_ctx   = torch.amp.autocast('cuda', dtype=torch.bfloat16) if device=='cuda' else contextlib.nullcontext()
-scaler         = torch.amp.GradScaler() if device=='cuda' else None
+amp_dtype      = torch.bfloat16
+autocast_ctx   = torch.amp.autocast('cuda', dtype=amp_dtype) if device=='cuda' else contextlib.nullcontext()
+# loss scaling is only needed for float16 (narrow exponent range), bfloat16 has the same range as float32
+scaler         = torch.amp.GradScaler() if device=='cuda' and amp_dtype==torch.float16 else None
 
 # ─────────────────── tokenizer
 tokenizer = Tokenizer()
