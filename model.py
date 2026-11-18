@@ -108,20 +108,14 @@ class Transformer(nn.Module):
 
         return logits
 
-    def get_optimizer_grouped_parameters(self, weight_decay: float = 0.01) -> List[Dict]:
-        decay, no_decay, seen = [], [], set()
-        skip_modules = (nn.LayerNorm, nn.RMSNorm, nn.Embedding)
-
-        for module_name, module in self.named_modules():
-            for param_name, param in module.named_parameters(recurse=False):
-                if id(param) in seen or not param.requires_grad:
-                    continue
-                seen.add(id(param))
-
-                if isinstance(module, skip_modules) or param.dim() == 1:
-                    no_decay.append(param)
-                else:
-                    decay.append(param)
+    def get_optimizer_grouped_parameters(self, weight_decay: float = 0.1) -> List[Dict]:
+        """Decay every matrix (linear layers, the tied token embedding / output matrix, the position embedding),
+        but not the 1-dim norm weights and biases."""
+        decay, no_decay = [], []
+        for param in self.parameters():  # yields the tied tok/fc matrix only once
+            if not param.requires_grad:
+                continue
+            (decay if param.dim() >= 2 else no_decay).append(param)
 
         return [
             {"params": decay, "weight_decay": weight_decay},

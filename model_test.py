@@ -29,3 +29,16 @@ class ModelTests(TestCase):
         loss, logits = self.model(x, x)
         self.assertEqual(logits.shape, (2, 16, self.cfg.vocab_size))
         self.assertTrue(torch.isfinite(loss))
+
+    def test_weight_decay_groups(self):
+        decay, no_decay = self.model.get_optimizer_grouped_parameters(0.1)
+        decay_ids = [id(p) for p in decay["params"]]
+        no_decay_ids = [id(p) for p in no_decay["params"]]
+        all_ids = decay_ids + no_decay_ids
+
+        self.assertEqual(len(all_ids), len(set(all_ids)))  # every tensor once, the tied matrix included
+        self.assertEqual(set(all_ids), {id(p) for p in self.model.parameters()})
+        self.assertIn(id(self.model.tok.weight), decay_ids)
+        self.assertIn(id(self.model.pos.weight), decay_ids)
+        self.assertIn(id(self.model.norm.weight), no_decay_ids)
+        self.assertTrue(all(p.dim() == 1 for p in no_decay["params"]))
