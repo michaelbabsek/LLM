@@ -132,20 +132,34 @@ class Transformer(nn.Module):
             nn.init.ones_(m.weight)
             nn.init.zeros_(m.bias)
 
-    def generate(self, tokens: List[int], max_token_length: int, device):
-        input_tensor = torch.tensor(tokens, device=device).unsqueeze(0)
-        output = tokens.copy()
+    @torch.no_grad()
+    def generate(
+            self,
+            tokens: List[int],
+            max_new_tokens: int,
+            temperature: float = 1.0,
+            top_k: Optional[int] = None,
+            eos_token_id: Optional[int] = None,
+    ) -> List[int]:
+        """Autoregressive sampling. temperature=0 means greedy decoding. Returns prompt + generated tokens."""
+        was_training = self.training
+        self.eval()
+        device = self.tok.weight.device
+        idx = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
 
-        for _ in range(max_token_length - len(tokens)):
-            logits = self.forward(input_tensor)
-            probs = F.softmax(logits[:, -1, :], dim=-1)
-            next_token = torch.argmax(probs, dim=-1).item()
-            output.append(next_token)
+        for _ in range(max_new_tokens):
+            logits = self(idx[:, -self.cfg.max_seq_len:])[:, -1, :].float()  # crop context to max_seq_len
+            if temperature == 0:
+                next_token = torch.argmax(logits, dim=-1, keepdim=True)
+            else:
+                logits = logits / temperature
+                if top_k is not None:
+                    v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                    logits[logits < v[:, [-1]]] = -float("inf")
+                next_token = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
+            idx = torch.cat([idx, next_token], dim=1)
+            if eos_token_id is not None and next_token.item() == eos_token_id:
+                break
 
-            input_tensor = torch.cat([input_tensor, torch.tensor([[next_token]], device=device)], dim=1)
-
-        return output
-
-
-
-
+        self.train(was_training)
+        return idx[0].tolist()
